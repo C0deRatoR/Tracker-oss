@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window behind the app, shown for the frame before Compose draws and by the starting
+      window at launch. It follows the app's DEFAULT theme rather than the current choice,
+      because neither is readable from a DataStore preference at that point — so it is the
+      paper ground, and choosing Dark costs one light frame at a cold start.
+    -->
+    <color name="window_background">#FBF9F4</color>
+    <color name="ic_launcher_background">#2B5BF5</color>
+</resources>

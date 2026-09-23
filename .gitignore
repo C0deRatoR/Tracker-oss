@@ -1,0 +1,25 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing — losing these means no in-place updates, back them up outside git
+keystore.properties
+*.jks
+*.keystore
+
+# Design source packs — kept beside the repo, not in it
+stitch_*.zip
+
+# Never commit secrets
+*.env
+secrets.properties
+
+# Python bytecode from the tools/ scripts
+__pycache__/
+*.pyc

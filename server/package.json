@@ -1,0 +1,11 @@
+{
+  "name": "nutrioto-proxy",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

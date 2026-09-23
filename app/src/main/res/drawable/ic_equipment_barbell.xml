@@ -1,0 +1,15 @@
+<!-- Equipment marks, drawn here because no exercise artwork can be licensed (BACKLOG.md).
+     Six shapes, one per equipment value, so a list of 819 rows can be scanned rather than read. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <!-- A long sleeve with a plate stack at each end: the bar is the whole width. -->
+    <path android:fillColor="@android:color/white" android:pathData="M2,10.5h1.6v3H2z" />
+    <path android:fillColor="@android:color/white" android:pathData="M4.4,8h2.2v8H4.4z" />
+    <path android:fillColor="@android:color/white" android:pathData="M7.4,11h9.2v2H7.4z" />
+    <path android:fillColor="@android:color/white" android:pathData="M17.4,8h2.2v8h-2.2z" />
+    <path android:fillColor="@android:color/white" android:pathData="M20.4,10.5H22v3h-1.6z" />
+</vector>

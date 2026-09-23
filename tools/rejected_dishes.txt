@@ -1,0 +1,232 @@
+Almond soup	macros imply 179 kcal, row says 79
+Apple oats chia seed smoothie	serving weight 628.5g implausible
+Baked stuffed fish	serving weight 608.5g implausible
+Banana appam	fat 42.53g/100g suggests uncounted frying oil
+Banana chips	kcal/100g out of range (665.67)
+Bathua poori	fat 59.14g/100g suggests uncounted frying oil
+Beetroot poori	fat 52.18g/100g suggests uncounted frying oil
+Bengal 5 Spice Blend	macros imply 352 kcal, row says 290
+Besan kadhi with pakodies	fat 42.59g/100g suggests uncounted frying oil
+Bhatura	kcal/100g out of range (793.2)
+Bhel puri	fat 47.91g/100g suggests uncounted frying oil
+Boondi raita	kcal/100g out of range (687.72)
+Bread pakora/pakoda	kcal/100g out of range (710.99)
+Bread roll	fat 40.25g/100g suggests uncounted frying oil
+Brown sauce	macros imply 282 kcal, row says 109
+Butterfly biscuit	serving weight 12.1g implausible
+Cabbage kofta curry	kcal/100g out of range (639.81)
+Cabbage manchurian	serving weight 740.4g implausible
+Canjee	kcal/100g out of range (6.61)
+Cauliflower canjee	kcal/100g out of range (6.9)
+Cauliflower kofta curry	kcal/100g out of range (641.1)
+Cauliflower pakora/pakoda	kcal/100g out of range (671.63)
+Cauliflower potato canjee	kcal/100g out of range (16.79)
+Cheese balls	kcal/100g out of range (681.28)
+Cheese soup	macros imply 211 kcal, row says 41
+Cheese straws	serving weight 9.6g implausible
+Cheese toast	kcal/100g out of range (785.37)
+Chicken consomme	macros imply 159 kcal, row says 48
+Chicken kebab	kcal/100g out of range (729.41)
+Chicken manchurian	macros imply 170 kcal, row says 142
+Chicken pakora/pakoda	fat 60.98g/100g suggests uncounted frying oil
+Chicken pulao	macros imply 145 kcal, row says 108
+Chicken sweet and sour	fat 47.59g/100g suggests uncounted frying oil
+Chicken sweet corn soup	macros imply 178 kcal, row says 28
+Chilli paneer	kcal/100g out of range (777.51)
+Chinese cabbage and meat ball soup	fat 56.57g/100g suggests uncounted frying oil
+Classic seasoned black beans	macros imply 137 kcal, row says 29
+Clear tomato soup	macros imply 143 kcal, row says 80
+Coconut kheer	serving weight 650.4g implausible
+Coconut pickle	fat 51.71g/100g suggests uncounted frying oil
+Coffee drops	serving weight 11.8g implausible
+Cold cucumber cream soup	kcal/100g out of range (11.88)
+Cold summer garden soup	macros imply 172 kcal, row says 49
+Cold tomato soup	kcal/100g out of range (16.9)
+Consomme au julienne	macros imply 152 kcal, row says 28
+Consomme au vermicelli	macros imply 183 kcal, row says 30
+Coriander chutney	serving is 8 kcal
+Cream of broccoli soup	macros imply 166 kcal, row says 56
+Cream of carrot soup	macros imply 167 kcal, row says 60
+Cream of green peas soup	macros imply 189 kcal, row says 128
+Cream of mixed vegetable soup	macros imply 129 kcal, row says 60
+Cream of mushroom soup	macros imply 181 kcal, row says 117
+Cream of potato soup	macros imply 165 kcal, row says 60
+Cream of spinach soup	macros imply 154 kcal, row says 101
+Cream of tomato soup	macros imply 152 kcal, row says 98
+Creamed spinach and mushroom	fat 44.14g/100g suggests uncounted frying oil
+Crispy okra/Crispy lady's fingers	kcal/100g out of range (657.76)
+Cumin infused water	kcal/100g out of range (9.09)
+Cumin seeds baghar	kcal/100g out of range (736.81)
+Curried Cauliflower soup	macros imply 127 kcal, row says 37
+Dahi vadas/Dahi bhalla	kcal/100g out of range (667.73)
+Dal stuffed poori	kcal/100g out of range (785.16)
+Danish cookies	serving weight 12.6g implausible
+Dessicated coconut chutney	serving weight 10.8g implausible
+Dum aloo	kcal/100g out of range (682.33)
+Egg cutlet	fat 60.25g/100g suggests uncounted frying oil
+Egg drop soup	macros imply 178 kcal, row says 27
+Egg pakora/pakoda	kcal/100g out of range (710.51)
+Fermented bengal gram vada	kcal/100g out of range (657.57)
+Fish cutlet	kcal/100g out of range (654.64)
+Fish finger	fat 55.82g/100g suggests uncounted frying oil
+Fish orly	fat 58.18g/100g suggests uncounted frying oil
+Fish pakora/pakoda	fat 59.52g/100g suggests uncounted frying oil
+Flattened rice cutlet	kcal/100g out of range (701.71)
+French dressing	kcal/100g out of range (733.77)
+French onion soup	macros imply 192 kcal, row says 56
+Fried fish (Indian style)	kcal/100g out of range (658.54)
+Fried fish and Chips (English Style)	kcal/100g out of range (651.75)
+Fruit flan	serving is 1216 kcal
+Garlic pickle	fat 39.88g/100g suggests uncounted frying oil
+Ghiya/Lauki Kofta Curry	kcal/100g out of range (638.71)
+Ghujia/Lavang latika	kcal/100g out of range (768.98)
+Ginger biscuit	serving weight 13.5g implausible
+Gobi 65	serving weight 857.5g implausible
+Gooseberry chutney	serving is 7 kcal
+Gram flour and semolina chilla/cheela/savory pancake	kcal/100g out of range (758.89)
+Gram flour poori	kcal/100g out of range (697.66)
+Green chilli sauce	macros imply 37 kcal, row says 46
+Green pea soup	macros imply 175 kcal, row says 40
+Gujarati handvo	serving weight 696.6g implausible
+Gulab Jamun with khoya	fat 53.23g/100g suggests uncounted frying oil
+Gulab jamun with milk powder	fat 40.15g/100g suggests uncounted frying oil
+Gun powder chutney	serving weight 13.9g implausible
+Gunjia	kcal/100g out of range (667.34)
+Hot tea	kcal/100g out of range (16.14)
+Ice box cookies	serving weight 13.9g implausible
+Iced tea	kcal/100g out of range (10.34)
+Indian lamb and egg curry	serving is 1312 kcal
+Jackfruit fritters	fat 54.41g/100g suggests uncounted frying oil
+Jackfruit kofta curry	serving weight 750.3g implausible
+Jackfruit sabzi	kcal/100g out of range (625.4)
+Jackfruit/Kathal	fat 51.78g/100g suggests uncounted frying oil
+Khakhra chaat	serving weight 835.5g implausible
+Khasta kachori	kcal/100g out of range (712.73)
+Kiwi granola pudding	serving is 1472 kcal
+Lasagne with meat sauce	serving weight 1774.5g implausible
+Lasagne with vegetables	serving weight 1757.2g implausible
+Lassi	kcal/100g out of range (18.84)
+Lemon chiffon pie	serving is 1390 kcal
+Lemon green chilli pickle	kcal/100g out of range (14.07)
+Lentil soup	macros imply 159 kcal, row says 31
+Lotus seed halwa	serving is 1343 kcal
+Lotus stem kofta curry	kcal/100g out of range (633.56)
+Mal pua	fat 54.64g/100g suggests uncounted frying oil
+Mango malpua	serving is 1315 kcal
+Masala green chilli pakora/pakoda	kcal/100g out of range (668.76)
+Masala onion pakora/pakoda	fat 57.61g/100g suggests uncounted frying oil
+Masala souffle	serving weight 1484.7g implausible
+Masala urad dal vada	kcal/100g out of range (703.78)
+Masala vada	kcal/100g out of range (826.02)
+Mathri	kcal/100g out of range (805.12)
+Mayonnaise	kcal/100g out of range (774.86)
+Mayonnaise without eggs	serving is 1274 kcal
+Meat and macaroni casserole	macros imply 193 kcal, row says 162
+Meat consomme	macros imply 185 kcal, row says 30
+Meat stock	serving weight 870.0g implausible
+Methi chaman	fat 50.91g/100g suggests uncounted frying oil
+Methi pakora/pakoda	kcal/100g out of range (713.25)
+Methi poori	kcal/100g out of range (710.02)
+Millet soup	macros imply 191 kcal, row says 56
+Minced meat cutlet	fat 54.47g/100g suggests uncounted frying oil
+Minced meat pancake	macros imply 175 kcal, row says 116
+Minced meat samosa	kcal/100g out of range (620.99)
+Minestrone soup	macros imply 152 kcal, row says 43
+Mint tomato chutney	serving is 8 kcal
+Mixed stock	serving weight 910.0g implausible
+Mixed vegetable pakora/pakoda	kcal/100g out of range (673.81)
+Mixed vegetable soup	macros imply 150 kcal, row says 36
+Mulligatawny soup	macros imply 198 kcal, row says 54
+Mustard seeds baghar	fat 54.3g/100g suggests uncounted frying oil
+Mutton chops	kcal/100g out of range (663.64)
+Mutton pulao	macros imply 168 kcal, row says 131
+Nannari sharbat	serving weight 1115.0g implausible
+Onion pakora/pakoda	kcal/100g out of range (674.61)
+Onion tomato uttapam	fat 45.3g/100g suggests uncounted frying oil
+Orange chiffon pie	serving weight 698.5g implausible
+Paneer and pea samosa	kcal/100g out of range (623.81)
+Paneer cutlet	kcal/100g out of range (672.2)
+Paneer kofta curry	kcal/100g out of range (670.91)
+Paneer makhana korma	kcal/100g out of range (775.82)
+Paneer pakora/pakoda	kcal/100g out of range (718.12)
+Paneer potato cutlet	kcal/100g out of range (672.94)
+Paneer pulao	fat 59.81g/100g suggests uncounted frying oil
+Paneer soup	serving weight 610.7g implausible
+Papdi	kcal/100g out of range (708.96)
+Pasta hot pot	serving weight 831.4g implausible
+Pea kofta curry	fat 63.39g/100g suggests uncounted frying oil
+Peanut burfi	fat 36.84g/100g suggests uncounted frying oil
+Peanut cutlet	kcal/100g out of range (698.77)
+Peanut sago vada	kcal/100g out of range (749.89)
+Pearl millet mathri	kcal/100g out of range (785.08)
+Peas kachori	fat 57.51g/100g suggests uncounted frying oil
+Peas poori	fat 57.69g/100g suggests uncounted frying oil
+Pickled cabbage	kcal/100g out of range (13.69)
+Pickled mustard greens	kcal/100g out of range (13.12)
+Plain urad dal vada	kcal/100g out of range (745.5)
+Poori	kcal/100g out of range (737.63)
+Poshtik cutlet	fat 50.94g/100g suggests uncounted frying oil
+Poshtik namak paras	kcal/100g out of range (613.39)
+Potato aigrettes	fat 54.24g/100g suggests uncounted frying oil
+Potato bonda	kcal/100g out of range (632.84)
+Potato canjee	kcal/100g out of range (16.26)
+Potato kofta curry	fat 49.08g/100g suggests uncounted frying oil
+Potato pakora/pakoda	kcal/100g out of range (677.19)
+Potato pickle	fat 36.46g/100g suggests uncounted frying oil
+Potato samosa	fat 59.19g/100g suggests uncounted frying oil
+Potato stuffed poori	kcal/100g out of range (776.74)
+Raw banana kofta curry	kcal/100g out of range (627.27)
+Rice moong dal cheela	kcal/100g out of range (798.26)
+Rice murukku	fat 48.22g/100g suggests uncounted frying oil
+Saffron biscuit	serving weight 11.0g implausible
+Sago cutlet/vadas	fat 56.97g/100g suggests uncounted frying oil
+Schezwan chutney	serving weight 757.0g implausible
+Scotch egg	kcal/100g out of range (676.89)
+Semolina carrot vada	kcal/100g out of range (699.53)
+Sesame biscuit	serving weight 14.5g implausible
+Sesame toast	fat 49.38g/100g suggests uncounted frying oil
+Sev	kcal/100g out of range (609.14)
+Shahi keema kofta curry	fat 43.83g/100g suggests uncounted frying oil
+Shammi kebab	kcal/100g out of range (685.69)
+Small onion pickle	kcal/100g out of range (16.86)
+Soya chunks sweet and sour	fat 55.99g/100g suggests uncounted frying oil
+Soyabean muthias	kcal/100g out of range (839.33)
+Soyabean namak paras	kcal/100g out of range (838.46)
+Soyabean tikki	kcal/100g out of range (698.17)
+Spaghetti and cheese balls in tomato sauce	fat 52.08g/100g suggests uncounted frying oil
+Spaghetti bolognese	macros imply 163 kcal, row says 97
+Spicy corn chaat	fat 46.55g/100g suggests uncounted frying oil
+Spinach chickpeas cutlet	kcal/100g out of range (688.03)
+Spinach kofta curry	fat 61.49g/100g suggests uncounted frying oil
+Spinach pakora/pakoda	kcal/100g out of range (712.62)
+Spinach paneer kofta curry	kcal/100g out of range (606.03)
+Spinach peanut namak paras	kcal/100g out of range (740.16)
+Spinach poori	kcal/100g out of range (684.25)
+Spinach soup	macros imply 183 kcal, row says 33
+Spring roll	kcal/100g out of range (623.87)
+Steeped hot coffee	kcal/100g out of range (15.91)
+Sunflower cookies	fat 36.28g/100g suggests uncounted frying oil
+Sweet and salty biscuit	serving weight 10.7g implausible
+Sweet plain biscuit	serving weight 14.3g implausible
+Sweet poori	kcal/100g out of range (782.75)
+Talaumein soup	macros imply 172 kcal, row says 36
+Tandoori chicken	serving weight 1440.8g implausible
+Tartare sauce	kcal/100g out of range (610.93)
+Thousand island dressing	fat 42.87g/100g suggests uncounted frying oil
+Tomato fish	fat 51.91g/100g suggests uncounted frying oil
+Tomato ginger chutney	serving is 7 kcal
+Tutti frutti cake	serving weight 848.2g implausible
+Veg manchurian	fat 61.65g/100g suggests uncounted frying oil
+Vegetable burger	fat 50.63g/100g suggests uncounted frying oil
+Vegetable cutlet	kcal/100g out of range (665.45)
+Vegetable samosa	fat 42.22g/100g suggests uncounted frying oil
+Vegetable seekh kebab	kcal/100g out of range (690.73)
+Vegetable stock	kcal/100g out of range (17.6)
+Vegetable yakhni	fat 43.8g/100g suggests uncounted frying oil
+Vegetarian egg kofta curry	kcal/100g out of range (627.41)
+Vegetarian nargisi kofta curry	serving is 1325 kcal
+Vegeterian scotch egg	kcal/100g out of range (681.67)
+Walnut chutney	serving weight 12.4g implausible
+White stock	kcal/100g out of range (6.99)
+Yam fried	fat 51.79g/100g suggests uncounted frying oil
+Yam kofta curry	serving weight 750.3g implausible

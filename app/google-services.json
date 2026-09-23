@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "186319507324",
+    "project_id": "tracker-yash-2026",
+    "storage_bucket": "tracker-yash-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:186319507324:android:5ee821fcbec3541784def9",
+        "android_client_info": {
+          "package_name": "com.yash.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBHMnqbAy-RAyBgN_D-UjL6DgJuFgjd58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:186319507324:android:8ed2eb664b34244c84def9",
+        "android_client_info": {
+          "package_name": "com.yash.tracker.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBHMnqbAy-RAyBgN_D-UjL6DgJuFgjd58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
