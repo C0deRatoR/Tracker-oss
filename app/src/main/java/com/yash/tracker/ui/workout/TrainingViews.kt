@@ -8,14 +8,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.yash.tracker.data.local.entity.ExerciseEntity
+import com.yash.tracker.domain.workout.NextWorkout
+import com.yash.tracker.domain.workout.readable
 import com.yash.tracker.domain.workout.MuscleVolume
 import com.yash.tracker.domain.workout.TrainingAnalyst
 import com.yash.tracker.domain.workout.TrainingReport
@@ -27,49 +31,94 @@ import com.yash.tracker.ui.components.IconPlate
 import com.yash.tracker.ui.components.LuxCard
 import com.yash.tracker.ui.components.Pill
 import com.yash.tracker.ui.components.PillTone
-import com.yash.tracker.ui.components.TextAction
 import com.yash.tracker.ui.components.ThinBar
 import kotlin.math.roundToInt
 
 /**
- * The week in one card: the muscles furthest behind, and the few things most worth doing.
+ * What to train next and what the week is missing, in one card.
  *
- * Deliberately a teaser for the full analysis rather than all of it — the Workout tab is where
- * a session is started, and a screen of findings above the start button is in the way.
+ * This used to be two stacked cards, a due group with its movements and a balance card with
+ * bars. Together they took most of a screen above the start button. Here each finding is one
+ * line, and the bars live on the full analysis the card opens.
  */
 @Composable
-fun TrainingWeekCard(report: TrainingReport, onOpen: () -> Unit) {
-    LuxCard(Modifier.fillMaxWidth(), onClick = onOpen) {
-        Column(Modifier.padding(18.dp)) {
+fun ThisWeekCard(
+    due: NextWorkout.Train?,
+    movements: List<ExerciseEntity>,
+    report: TrainingReport?,
+    onOpenReport: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    LuxCard(Modifier.fillMaxWidth(), onClick = onOpenReport) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconPlate(Icons.Outlined.Analytics, size = 44.dp)
-                Spacer(Modifier.width(14.dp))
+                IconPlate(Icons.Outlined.Insights, size = 40.dp)
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Eyebrow("Last 7 days")
-                    Spacer(Modifier.height(3.dp))
-                    Text("Training balance", style = MaterialTheme.typography.titleMedium)
+                    Eyebrow(if (due != null) "Next up" else "Last 7 days")
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        due?.group?.readable() ?: "Training balance",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
-                Pill("${report.workingSets} sets", tone = PillTone.Quiet)
+                val pill = when {
+                    due != null -> due.daysSince?.let { "${it}d rested" } ?: "Untrained"
+                    report != null -> "${report.workingSets} sets"
+                    else -> null
+                }
+                pill?.let { Pill(it, tone = PillTone.Quiet) }
             }
 
-            val behind = report.muscles
-                .filter { it.muscle.isPriority }
-                .sortedBy { it.sets }
-                .take(CARD_MUSCLES)
-            Spacer(Modifier.height(14.dp))
-            MuscleBars(behind)
+            if (due != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(due.reason, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                if (movements.isNotEmpty()) {
+                    Text(
+                        "Try: " + movements.joinToString(" · ") { it.name },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
 
-            if (report.suggestions.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
+            val findings = report?.suggestions.orEmpty().take(CARD_SUGGESTIONS)
+            if (findings.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
                 Hairline()
-                report.suggestions.take(CARD_SUGGESTIONS).forEach { suggestion ->
-                    Spacer(Modifier.height(12.dp))
-                    SuggestionLine(suggestion, compact = true)
+                findings.forEach { suggestion ->
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            suggestion.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        suggestion.readyInDays?.let {
+                            Spacer(Modifier.width(8.dp))
+                            Pill("in ${it}d", tone = PillTone.Quiet)
+                        }
+                    }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            TextAction("Full analysis", onClick = onOpen, color = MaterialTheme.colorScheme.primary)
+            if (report != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    buildString {
+                        append("Full analysis")
+                        val more = report.suggestions.size - findings.size
+                        if (more > 0) append(" · $more more")
+                        append(" →")
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                )
+            }
         }
     }
 }
@@ -102,7 +151,7 @@ fun MuscleBars(muscles: List<MuscleVolume>) {
 }
 
 @Composable
-fun SuggestionLine(suggestion: TrainingSuggestion, compact: Boolean = false) {
+fun SuggestionLine(suggestion: TrainingSuggestion) {
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -116,10 +165,8 @@ fun SuggestionLine(suggestion: TrainingSuggestion, compact: Boolean = false) {
                 Pill("in ${it}d", tone = PillTone.Quiet)
             }
         }
-        if (!compact) {
-            Spacer(Modifier.height(3.dp))
-            Text(suggestion.detail, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-        }
+        Spacer(Modifier.height(3.dp))
+        Text(suggestion.detail, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
         if (suggestion.exercises.isNotEmpty()) {
             Spacer(Modifier.height(3.dp))
             Text(
@@ -144,5 +191,4 @@ private fun gradeColor(grade: VolumeGrade): Color {
 
 fun Double.short(): String = if (this == roundToInt().toDouble()) roundToInt().toString() else "%.1f".format(this)
 
-private const val CARD_MUSCLES = 4
-private const val CARD_SUGGESTIONS = 3
+private const val CARD_SUGGESTIONS = 2

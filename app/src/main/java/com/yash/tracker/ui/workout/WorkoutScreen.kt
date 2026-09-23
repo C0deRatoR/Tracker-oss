@@ -1,6 +1,17 @@
 package com.yash.tracker.ui.workout
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -19,7 +30,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Close
@@ -27,7 +37,6 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,18 +53,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yash.tracker.data.local.dao.SessionWithSets
-import com.yash.tracker.data.local.entity.ExerciseEntity
 import com.yash.tracker.data.local.entity.isLogged
 import com.yash.tracker.domain.workout.NextWorkout
 import com.yash.tracker.domain.workout.TemplatePlan
-import com.yash.tracker.domain.workout.readable
 import com.yash.tracker.ui.components.ActionTone
 import com.yash.tracker.ui.components.CircleIconButton
 import com.yash.tracker.ui.components.DetailTopBar
 import com.yash.tracker.ui.components.EmptyNote
 import com.yash.tracker.ui.components.Eyebrow
 import com.yash.tracker.ui.components.GroupHeader
-import com.yash.tracker.ui.components.Hairline
 import com.yash.tracker.ui.components.IconPlate
 import com.yash.tracker.ui.components.LuxCard
 import com.yash.tracker.ui.components.LuxTextField
@@ -105,13 +111,18 @@ fun WorkoutScreen(
         return
     }
 
+    // Collapsed by default once there is something of your own above them: templates are
+    // how a routine list starts, not something to scroll past every visit.
+    var templatesOpen by rememberSaveable(routines.isEmpty()) { mutableStateOf(routines.isEmpty()) }
+    var allHistory by rememberSaveable { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize()) {
         LuxTopBar(eyebrow = "Training", title = "Workout")
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // An unfinished session outranks everything: it is almost certainly why the tab
             // was opened.
@@ -143,60 +154,43 @@ fun WorkoutScreen(
                 }
             }
 
-            // Above the buttons, because it is the thing that decides which of them to press.
-            (nextWorkout?.plan as? NextWorkout.Train)?.let { due ->
-                item { StaggerIn(1) { NextUpCard(due, nextWorkout?.movements.orEmpty()) } }
-            }
-
-            trainingReport?.takeIf { !it.isEmpty }?.let { report ->
-                item { StaggerIn(1) { TrainingWeekCard(report, onOpenReport) } }
-            }
-
+            // The two things the tab is opened for, side by side rather than a button and a
+            // whole card stacked on top of each other.
             item {
-                StaggerIn(1) {
-                    PillButton(
-                        text = "Start an empty workout",
-                        onClick = { onStartRoutine(null) },
-                        leadingIcon = Icons.Default.Add,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                StaggerIn(0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PillButton(
+                            text = "Start workout",
+                            onClick = { onStartRoutine(null) },
+                            leadingIcon = Icons.Default.Add,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PillButton(
+                            text = "Library",
+                            onClick = onBrowseExercises,
+                            tone = ActionTone.Soft,
+                        )
+                    }
                 }
             }
 
-            item {
-                StaggerIn(2) {
-                    SoftCard(Modifier.fillMaxWidth(), onClick = onBrowseExercises) {
-                        Row(
-                            Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconPlate(Icons.Outlined.FitnessCenter, size = 44.dp)
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Exercise library",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                                Text(
-                                    // No count here: the library screen prints the real one, and
-                                    // a literal drifts every time the catalogue is rebuilt.
-                                    "Every movement, with your history on each",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Icon(
-                                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+            val due = nextWorkout?.plan as? NextWorkout.Train
+            val report = trainingReport?.takeIf { !it.isEmpty }
+            if (due != null || report != null) {
+                item {
+                    StaggerIn(1) {
+                        ThisWeekCard(
+                            due = due,
+                            movements = nextWorkout?.movements.orEmpty(),
+                            report = report,
+                            onOpenReport = onOpenReport,
+                        )
                     }
                 }
             }
 
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 GroupHeader(
                     title = "Routines",
                     count = "${routines.size}",
@@ -206,90 +200,62 @@ fun WorkoutScreen(
             }
 
             if (routines.isEmpty()) {
-                item {
-                    EmptyNote(
-                        "No routines yet. Build one and it'll start prefilled with last time's " +
-                            "numbers.",
-                    )
-                }
+                item { EmptyNote("No routines yet. Add a template below, or build your own.") }
             } else {
                 // Routines and sessions share this list, and their ids are separate sequences that
                 // both start at 1 — so the keys have to say which table they came from.
                 items(routines, key = { "routine-${it.routine.routine.id}" }) { card ->
-                    LuxCard(
-                        Modifier.fillMaxWidth().animateItem(),
-                        onClick = { onStartRoutine(card.routine.routine.id) },
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    card.routine.routine.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                CircleIconButton(
-                                    icon = Icons.Outlined.Edit,
-                                    contentDescription = "Edit ${card.routine.routine.name}",
-                                    onClick = { viewModel.editRoutine(card) },
-                                    size = 36.dp,
-                                )
-                                CircleIconButton(
-                                    icon = Icons.Outlined.ContentCopy,
-                                    contentDescription = "Duplicate ${card.routine.routine.name}",
-                                    onClick = { viewModel.duplicateRoutine(card.routine.routine.id) },
-                                    size = 36.dp,
-                                )
-                                CircleIconButton(
-                                    icon = Icons.Outlined.DeleteOutline,
-                                    contentDescription = "Delete ${card.routine.routine.name}",
-                                    onClick = { viewModel.deleteRoutine(card.routine.routine.id) },
-                                    size = 36.dp,
-                                )
-                            }
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                card.exerciseNames.joinToString(" · ").ifBlank { "No exercises" },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Pill(
-                                card.lastPerformedAt?.let { "Last done ${ago(it)}" } ?: "Never done",
-                                tone = PillTone.Quiet,
-                            )
-                        }
-                    }
+                    RoutineRow(
+                        card = card,
+                        modifier = Modifier.animateItem(),
+                        onStart = { onStartRoutine(card.routine.routine.id) },
+                        onEdit = { viewModel.editRoutine(card) },
+                        onDuplicate = { viewModel.duplicateRoutine(card.routine.routine.id) },
+                        onDelete = { viewModel.deleteRoutine(card.routine.routine.id) },
+                    )
                 }
             }
 
             if (templates.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(6.dp))
-                    GroupHeader("Templates", count = "${templates.size}")
-                }
-                items(templates, key = { "template-${it.split.name}" }) { plan ->
-                    TemplateCard(
-                        plan = plan,
-                        added = plan.split in addedTemplates,
-                        onAdd = { viewModel.addTemplate(plan) },
-                        modifier = Modifier.animateItem(),
+                    CollapsibleHeader(
+                        title = "Templates",
+                        count = "${templates.size}",
+                        open = templatesOpen,
+                        onToggle = { templatesOpen = !templatesOpen },
                     )
+                }
+                if (templatesOpen) {
+                    items(templates, key = { "template-${it.split.name}" }) { plan ->
+                        TemplateRow(
+                            plan = plan,
+                            added = plan.split in addedTemplates,
+                            onAdd = { viewModel.addTemplate(plan) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
                 }
             }
 
             item {
                 Spacer(Modifier.height(6.dp))
-                GroupHeader("History", count = "${sessions.size}")
+                GroupHeader(
+                    title = "History",
+                    count = "${sessions.size}",
+                    action = if (sessions.size > RECENT_SESSIONS) {
+                        if (allHistory) "Show less" else "Show all"
+                    } else {
+                        null
+                    },
+                    onAction = { allHistory = !allHistory },
+                )
             }
 
             if (sessions.isEmpty()) {
                 item { EmptyNote("Nothing logged yet.") }
             } else {
-                items(sessions, key = { "session-${it.session.id}" }) { session ->
+                val shown = if (allHistory) sessions else sessions.take(RECENT_SESSIONS)
+                items(shown, key = { "session-${it.session.id}" }) { session ->
                     SessionCard(
                         session = session,
                         modifier = Modifier.animateItem(),
@@ -304,29 +270,135 @@ fun WorkoutScreen(
     }
 }
 
+/** Past this, history is behind "Show all": the last few sessions are the ones you look up. */
+private const val RECENT_SESSIONS = 3
+
 /**
- * A standard split, already fitted to the onboarding answers, one tap from being routines.
+ * One routine on one card: name, size, when it was last done. Tapping it starts it.
  *
- * The recommended one says why, so the choice can be disagreed with; the others are there for
- * whoever knows they will train more or less than their activity level suggests.
+ * Edit, duplicate and delete used to sit as three icons on every card, which made each
+ * routine twice as tall as the one thing it is for. They live in a menu now.
  */
 @Composable
-private fun TemplateCard(plan: TemplatePlan, added: Boolean, onAdd: () -> Unit, modifier: Modifier = Modifier) {
-    SoftCard(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(plan.split.label, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        plan.split.daysPerWeek,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun RoutineRow(
+    card: RoutineCard,
+    onStart: () -> Unit,
+    onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val name = card.routine.routine.name
+
+    LuxCard(modifier.fillMaxWidth(), onClick = onStart) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    buildString {
+                        val count = card.exerciseNames.size
+                        append(if (count == 1) "1 exercise" else "$count exercises")
+                        append(" · ")
+                        append(card.lastPerformedAt?.let { "last done ${ago(it)}" } ?: "never done")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box {
+                CircleIconButton(
+                    icon = Icons.Outlined.MoreVert,
+                    contentDescription = "More for $name",
+                    onClick = { menuOpen = true },
+                    size = 40.dp,
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = { menuOpen = false; onEdit() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Duplicate") },
+                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                        onClick = { menuOpen = false; onDuplicate() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
+                        onClick = { menuOpen = false; onDelete() },
                     )
                 }
-                if (plan.isRecommended) {
-                    Pill("For you", tone = PillTone.Accent)
-                    Spacer(Modifier.width(8.dp))
+            }
+        }
+    }
+}
+
+/** A section heading that folds what is under it. The chevron points the way it will move. */
+@Composable
+private fun CollapsibleHeader(title: String, count: String, open: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClickLabel = if (open) "Collapse $title" else "Expand $title", onClick = onToggle)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.width(8.dp))
+        Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.weight(1f))
+        Icon(
+            if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * A standard split, fitted to the onboarding answers, one tap from being routines.
+ *
+ * Folded to a line by default — name, days, and whether it is the one for you. Tapping it
+ * shows its days; the full exercise list was what made the section a wall.
+ */
+@Composable
+private fun TemplateRow(plan: TemplatePlan, added: Boolean, onAdd: () -> Unit, modifier: Modifier = Modifier) {
+    var open by rememberSaveable(plan.split) { mutableStateOf(false) }
+
+    SoftCard(modifier.fillMaxWidth(), onClick = { open = !open }) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(plan.split.label, style = MaterialTheme.typography.titleSmall)
+                        if (plan.isRecommended) {
+                            Spacer(Modifier.width(8.dp))
+                            Pill("For you", tone = PillTone.Accent)
+                        }
+                    }
+                    Text(
+                        "${plan.split.daysPerWeek} · ${plan.routines.joinToString(" · ") { it.name }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
+                Spacer(Modifier.width(8.dp))
                 SmallAction(
                     text = if (added) "Added" else "Add",
                     onClick = onAdd,
@@ -334,74 +406,20 @@ private fun TemplateCard(plan: TemplatePlan, added: Boolean, onAdd: () -> Unit, 
                     tone = ActionTone.Soft,
                 )
             }
-            plan.reason?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            plan.routines.forEach { routine ->
-                Spacer(Modifier.height(8.dp))
-                Text(routine.name, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    routine.exercises.joinToString(" · ") { "${it.name} ${it.sets}×${it.repsLow}–${it.repsHigh}" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-/**
- * The muscle group with the best claim on this session, and what to do for it.
- *
- * Shown only when something is actually due. A card that says "everything is still
- * recovering" every other day is a card that trains the user to scroll past this one, and the
- * rest of the screen already works without it.
- */
-@Composable
-private fun NextUpCard(due: NextWorkout.Train, movements: List<ExerciseEntity>) {
-    LuxCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconPlate(Icons.Outlined.Insights, size = 44.dp)
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Eyebrow("Next up")
-                    Spacer(Modifier.height(3.dp))
-                    Text(due.group.readable(), style = MaterialTheme.typography.titleMedium)
+            if (open) {
+                plan.reason?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(Modifier.width(8.dp))
-                Pill(
-                    text = due.daysSince?.let { "${it}d rested" } ?: "Untrained",
-                    tone = PillTone.Quiet,
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Text(
-                due.reason,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (movements.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Hairline()
-                Spacer(Modifier.height(12.dp))
-                movements.forEachIndexed { index, movement ->
-                    if (index > 0) Spacer(Modifier.height(6.dp))
-                    Text(movement.name, style = MaterialTheme.typography.bodyMedium)
+                plan.routines.forEach { routine ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(routine.name, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        routine.exercises.joinToString(" · ") { "${it.name} ${it.sets}×${it.repsLow}–${it.repsHigh}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-            }
-
-            if (due.alsoDue.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "${due.alsoDue.joinToString(" and ") { it.readable() }} " +
-                        "${if (due.alsoDue.size == 1) "is" else "are"} just as due.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
@@ -460,10 +478,6 @@ private fun SessionCard(
 @Composable
 private fun RoutineEditorScreen(viewModel: WorkoutViewModel) {
     val draft by viewModel.newRoutine.collectAsStateWithLifecycle()
-    val nextWorkout by viewModel.nextWorkout.collectAsStateWithLifecycle()
-    val trainingReport by viewModel.trainingReport.collectAsStateWithLifecycle()
-    val templates by viewModel.templates.collectAsStateWithLifecycle()
-    val addedTemplates by viewModel.addedTemplates.collectAsStateWithLifecycle()
 
     Column(
         Modifier
