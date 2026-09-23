@@ -4,6 +4,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.yash.tracker.data.local.AppDatabase
 import com.yash.tracker.data.local.entity.ExerciseEntity
+import com.yash.tracker.domain.workout.TemplateExercise
+import com.yash.tracker.domain.workout.TemplateRoutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -162,5 +164,30 @@ class RoutineEditingTest {
         workouts.deleteSet(before.first())
 
         assertEquals(before.size - 1, workouts.session(sessionId)!!.sets.size)
+    }
+
+    @Test
+    fun `a template becomes one routine per day with its targets, skipping unknown names`() = runTest {
+        seed()
+        val ids = workouts.addTemplate(
+            listOf(
+                TemplateRoutine(
+                    "Push",
+                    listOf(
+                        TemplateExercise("bench press", sets = 4, repsLow = 6, repsHigh = 10),
+                        TemplateExercise("Not In The Catalogue", sets = 3, repsLow = 8, repsHigh = 12),
+                        TemplateExercise("Cable Fly", sets = 3, repsLow = 10, repsHigh = 15),
+                    ),
+                ),
+            ),
+        )
+
+        val routine = db.workoutDao().routine(ids.single())!!
+        assertEquals("Push", routine.routine.name)
+        assertEquals(listOf(bench, fly), exerciseIdsOf(routine.routine.id))
+        val first = routine.exercises.minBy { it.position }
+        assertEquals(4, first.targetSets)
+        assertEquals(6, first.targetRepsLow)
+        assertEquals(10, first.targetRepsHigh)
     }
 }

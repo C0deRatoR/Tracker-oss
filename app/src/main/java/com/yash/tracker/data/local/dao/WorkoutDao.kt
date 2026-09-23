@@ -36,6 +36,24 @@ data class MuscleRecency(
     val setsLastWeek: Int,
 )
 
+/** One logged working set with its exercise's anatomy, for the training analysis. */
+data class HistorySetRow(
+    val sessionId: Long,
+    val startedAt: Long,
+    val exerciseId: Long,
+    val exerciseName: String,
+    val muscleGroup: String,
+    val primaryMuscles: String?,
+    val secondaryMuscles: String?,
+    val force: String?,
+    val mechanic: String?,
+    val equipment: String,
+    val reps: Int?,
+    val weightKg: Double?,
+    val rpe: Double?,
+    val durationSec: Int?,
+)
+
 /** The last numbers logged for an exercise, which prefill the next session's set rows. */
 data class PreviousSet(
     val setIndex: Int,
@@ -309,6 +327,74 @@ interface WorkoutDao {
         """,
     )
     fun observeMuscleRecency(weekStart: Long): Flow<List<MuscleRecency>>
+
+    /**
+     * Every logged working set since [from], with the anatomy of its exercise attached.
+     *
+     * The training analysis reads six weeks of this at once. Flat rows rather than sessions
+     * with relations: the analysis never needs a session as a whole, and one join is far
+     * cheaper than a relation per set.
+     */
+    @Query(
+        """
+        SELECT s.id AS sessionId, s.started_at AS startedAt, e.id AS exerciseId,
+               e.name AS exerciseName, e.muscle_group AS muscleGroup,
+               e.primary_muscles AS primaryMuscles, e.secondary_muscles AS secondaryMuscles,
+               e.force AS force, e.mechanic AS mechanic, e.equipment AS equipment,
+               ws.reps AS reps, ws.weight_kg AS weightKg, ws.rpe AS rpe, ws.duration_sec AS durationSec
+        FROM workout_set ws
+        JOIN workout_session s ON s.id = ws.session_id
+        JOIN exercise e ON e.id = ws.exercise_id
+        WHERE ws.is_completed = 1 AND ws.is_warmup = 0
+          AND (ws.reps IS NOT NULL OR ws.weight_kg IS NOT NULL
+               OR ws.distance_m IS NOT NULL OR ws.duration_sec IS NOT NULL)
+          AND s.is_finished = 1 AND s.started_at >= :from
+        ORDER BY s.started_at ASC, ws.position ASC, ws.set_index ASC
+        """,
+    )
+    fun observeHistorySets(from: Long): Flow<List<HistorySetRow>>
+
+    @Query(
+        """
+        SELECT s.id AS sessionId, s.started_at AS startedAt, e.id AS exerciseId,
+               e.name AS exerciseName, e.muscle_group AS muscleGroup,
+               e.primary_muscles AS primaryMuscles, e.secondary_muscles AS secondaryMuscles,
+               e.force AS force, e.mechanic AS mechanic, e.equipment AS equipment,
+               ws.reps AS reps, ws.weight_kg AS weightKg, ws.rpe AS rpe, ws.duration_sec AS durationSec
+        FROM workout_set ws
+        JOIN workout_session s ON s.id = ws.session_id
+        JOIN exercise e ON e.id = ws.exercise_id
+        WHERE ws.is_completed = 1 AND ws.is_warmup = 0
+          AND (ws.reps IS NOT NULL OR ws.weight_kg IS NOT NULL
+               OR ws.distance_m IS NOT NULL OR ws.duration_sec IS NOT NULL)
+          AND s.is_finished = 1 AND s.started_at >= :from AND s.started_at <= :to
+        ORDER BY s.started_at ASC, ws.position ASC, ws.set_index ASC
+        """,
+    )
+    suspend fun historySetsBetween(from: Long, to: Long): List<HistorySetRow>
+
+    /** One session's sets on the same shape, finished or not. */
+    @Query(
+        """
+        SELECT s.id AS sessionId, s.started_at AS startedAt, e.id AS exerciseId,
+               e.name AS exerciseName, e.muscle_group AS muscleGroup,
+               e.primary_muscles AS primaryMuscles, e.secondary_muscles AS secondaryMuscles,
+               e.force AS force, e.mechanic AS mechanic, e.equipment AS equipment,
+               ws.reps AS reps, ws.weight_kg AS weightKg, ws.rpe AS rpe, ws.duration_sec AS durationSec
+        FROM workout_set ws
+        JOIN workout_session s ON s.id = ws.session_id
+        JOIN exercise e ON e.id = ws.exercise_id
+        WHERE ws.is_completed = 1 AND ws.is_warmup = 0
+          AND (ws.reps IS NOT NULL OR ws.weight_kg IS NOT NULL
+               OR ws.distance_m IS NOT NULL OR ws.duration_sec IS NOT NULL)
+          AND s.id = :sessionId
+        ORDER BY ws.position ASC, ws.set_index ASC
+        """,
+    )
+    suspend fun historySetsForSession(sessionId: Long): List<HistorySetRow>
+
+    @Query("SELECT * FROM exercise")
+    suspend fun allExercises(): List<ExerciseEntity>
 
     /** The movements this user actually trains for a group, most-used first. */
     @Query(

@@ -34,9 +34,11 @@ class GeminiClientTest {
 
     /** Stands in for Settings, whose real implementation needs the Android Keystore. */
     private class FakeConfig(
+        var key: String? = "test-key",
         var model: String = "gemini-3.5-flash-lite",
         var grounding: Boolean = true,
     ) : GeminiConfig {
+        override suspend fun apiKey() = key
         override suspend fun model() = model
         override suspend fun isGroundingEnabled() = grounding
     }
@@ -94,18 +96,20 @@ class GeminiClientTest {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        config.key = "test-key"
         identity.stored = "test-token"
     }
 
     @After
     fun tearDown() = runTest {
+        config.key = null
         db.close()
     }
 
     private fun client(service: GeminiService) = GeminiClient(
         service,
         config,
-        GeminiAuth(identity),
+        GeminiAuth(config, identity),
         db.aiCacheDao(),
         Dispatchers.Unconfined,
     )
@@ -192,7 +196,8 @@ class GeminiClientTest {
     }
 
     @Test
-    fun `no identity at all is its own failure, not a rejection`() = runTest {
+    fun `neither an own key nor an identity is its own failure, not a rejection`() = runTest {
+        config.key = null
         identity.stored = null
         val outcome = client(FakeService(mutableListOf())).recognizeText("roti", "system")
 
@@ -285,27 +290,73 @@ class GeminiClientTest {
     }
 
     @Test
-    fun `every call goes to the proxy, bearing the identity token`() = runTest {
+    fun `an own key goes straight to Google, in a header, with the model in the path`() = runTest {
+        val service = FakeService(mutableListOf({ reply(goodMeal) }))
+        client(service).recognizeText("roti", "system")
+
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+            service.url,
+        )
+        assertEquals("test-key", service.headers["x-goog-api-key"])
+    }
+
+    @Test
+    fun `without an own key the call goes to the proxy, bearing the identity token`() = runTest {
+        config.key = null
         val service = FakeService(mutableListOf({ reply(goodMeal) }))
         client(service).recognizeText("roti", "system")
 
         val url = service.url.orEmpty()
         assertTrue("must not go straight to Google", !url.contains("generativelanguage"))
-        assertTrue(
-            "model still belongs in the path",
-            url.endsWith("/v1beta/models/gemini-3.5-flash-lite:generateContent"),
-        )
+        assertTrue("model still belongs in the path", url.endsWith("/v1beta/models/gemini-3.5-flash-lite:generateContent"))
         assertEquals("Bearer test-token", service.headers["Authorization"])
         assertEquals("the shared key must never leave the server", null, service.headers["x-goog-api-key"])
     }
 
     @Test
-    fun `a rejection does not send the user to Settings to fix a key they never set`() = runTest {
+    fun `a rejection on the shared key does not send the user to Settings to fix a key`() = runTest {
+        config.key = null
         val service = FakeService(mutableListOf({ httpError(401) }))
         val outcome = client(service).recognizeText("roti", "system")
 
         val failure = outcome as RecognitionOutcome.Failure
         assertEquals(FailureKind.KEY_REJECTED, failure.kind)
         assertTrue("should not blame a key they never set", !failure.message.startsWith("Your Gemini key"))
+    }
+
+    @Test
+    fun `a coach note comes back as its text`() = runTest {
+        val service = FakeService(mutableListOf({ reply("""{"note":"Protein is the gap tonight."}""") }))
+        val outcome = client(service).coachNote("""{"kind":"next_meal"}""")
+
+        assertEquals(CoachOutcome.Success("Protein is the gap tonight.", fromCache = false), outcome)
+        assertTrue("the findings travel as data", service.requests.single().contents.single().parts.single().text!!.contains("next_meal"))
+    }
+
+    @Test
+    fun `an empty coach note is retried once with the schema restated`() = runTest {
+        val service = FakeService(
+            mutableListOf({ reply("""{"note":""}""") }, { reply("""{"note":"Add a row."}""") }),
+        )
+        val outcome = client(service).coachNote("""{"kind":"training_week"}""")
+
+        assertEquals("Add a row.", (outcome as CoachOutcome.Success).note)
+        assertEquals(2, service.requests.size)
+    }
+
+    @Test
+    fun `the same findings are answered from the cache`() = runTest {
+        val findings = """{"kind":"next_meal","plates":[]}"""
+        client(FakeService(mutableListOf({ reply("""{"note":"Fine as it is."}""") }))).coachNote(findings)
+
+        val second = client(FakeService(mutableListOf())).coachNote(findings)
+        assertEquals(CoachOutcome.Success("Fine as it is.", fromCache = true), second)
+    }
+
+    @Test
+    fun `a rate-limited coach note says so`() = runTest {
+        val outcome = client(FakeService(mutableListOf({ httpError(429) }))).coachNote("{}")
+        assertEquals(FailureKind.RATE_LIMITED, (outcome as CoachOutcome.Failure).kind)
     }
 }

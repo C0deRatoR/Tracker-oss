@@ -4,30 +4,48 @@ import com.yash.tracker.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where one generateContent call goes, and what proves it may be made. */
-data class GeminiRoute(val url: String, val headers: Map<String, String>)
+/**
+ * Where one generateContent call goes, and what proves it may be made.
+ *
+ * [ownKey] because a rejected credential has to be explained differently depending on whose
+ * it was: telling someone to go and fix a key they never entered sends them nowhere.
+ */
+data class GeminiRoute(
+    val url: String,
+    val headers: Map<String, String>,
+    val ownKey: Boolean,
+)
 
 /**
- * Every call goes to the proxy, which holds the only Gemini key anyone uses.
+ * Picks between the user's own key and the one the app lends out.
  *
- * There was briefly a second route — a key the user pasted into Settings, sent straight to
- * Google on their own quota. It is gone: asking someone to go and fetch an API key is the
- * friction the proxy exists to remove, and keeping the field meant keeping a second path
- * through every failure message for the handful of people who would ever have used it.
- *
- * The cost is honest. If the proxy is down, photo logging is down, with no way for a user to
- * route around it. Everything else in the app — the diary, the gym log, manual entry — is
- * on-device and keeps working.
+ * Two hosts rather than one because a key set in Settings has no business travelling through
+ * our server: it is the user's quota, and sending it to us would mean trusting us with it for
+ * no gain. Routing it straight to Google also leaves photo logging working on a day the proxy
+ * is down, which is the only reason the Settings field is still there.
  */
 @Singleton
-class GeminiAuth @Inject constructor(private val identity: AppIdentity) {
-
-    /** Null when the app has no identity yet, which needs the network once and then never again. */
+class GeminiAuth @Inject constructor(
+    private val config: GeminiConfig,
+    private val identity: AppIdentity,
+) {
+    /** Null when the app has no identity yet and the user has set no key of their own. */
     suspend fun route(model: String): GeminiRoute? {
+        val path = "v1beta/models/$model:generateContent"
+
+        config.apiKey()?.let { key ->
+            return GeminiRoute("$GOOGLE_ORIGIN/$path", mapOf("x-goog-api-key" to key), ownKey = true)
+        }
+
         val token = identity.token() ?: return null
         return GeminiRoute(
-            url = "${BuildConfig.PROXY_URL}/v1beta/models/$model:generateContent",
+            url = "${BuildConfig.PROXY_URL}/$path",
             headers = mapOf("Authorization" to "Bearer $token"),
+            ownKey = false,
         )
+    }
+
+    private companion object {
+        const val GOOGLE_ORIGIN = "https://generativelanguage.googleapis.com"
     }
 }

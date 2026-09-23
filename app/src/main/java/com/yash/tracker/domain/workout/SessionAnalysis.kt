@@ -91,6 +91,10 @@ data class SessionAnalysis(
     val change: SessionChange?,
     /** Plain observations, at most a few, worst or most surprising first. */
     val notes: List<String>,
+    /** This session alone, muscle by muscle: the fine split, rep ranges, effort, push and pull. */
+    val breakdown: TrainingReport? = null,
+    /** The seven days ending with this session, for what the week still needs. */
+    val week: TrainingReport? = null,
 ) {
     val isEmpty: Boolean get() = muscleSplit.isEmpty() && trends.isEmpty()
 }

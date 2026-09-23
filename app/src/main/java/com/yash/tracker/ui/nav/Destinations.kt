@@ -72,6 +72,9 @@ data class SessionSummary(val sessionId: Long)
 
 /** The exercise catalogue, browsable rather than only searchable. */
 @Serializable
+data object TrainingAnalysis
+
+@Serializable
 data object ExerciseLibrary
 
 @Serializable

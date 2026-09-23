@@ -7,6 +7,8 @@ import com.yash.tracker.data.local.entity.TargetEntity
 import com.yash.tracker.domain.model.Plan
 import com.yash.tracker.data.prefs.SettingsRepository
 import com.yash.tracker.data.prefs.ThemeMode
+import com.yash.tracker.data.remote.ConnectionResult
+import com.yash.tracker.data.remote.GeminiConnectionTester
 import com.yash.tracker.data.local.entity.CorrectionEntity
 import com.yash.tracker.data.repository.ProfileRepository
 import com.yash.tracker.data.repository.RecognitionRepository
@@ -25,31 +27,59 @@ import javax.inject.Inject
 data class SettingsUiState(
     val profile: ProfileEntity? = null,
     val target: TargetEntity? = null,
+    val hasApiKey: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val weightUnit: WeightUnit = WeightUnit.KG,
     /** Whether "look it up" may put a search behind a reading, which costs more per call. */
     val groundingEnabled: Boolean = true,
 )
 
+data class ConnectionUiState(
+    val testing: Boolean = false,
+    val message: String? = null,
+    val success: Boolean = false,
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val profileRepository: ProfileRepository,
+    private val tester: GeminiConnectionTester,
     private val recognition: RecognitionRepository,
 ) : ViewModel() {
 
     val state = combine(
         profileRepository.observeProfile(),
         profileRepository.observeActiveTarget(),
-        settings.themeMode,
-        settings.weightUnit,
-        settings.groundingEnabled,
-    ) { profile, target, theme, unit, grounding ->
-        SettingsUiState(profile, target, theme, unit, grounding)
+        settings.hasApiKey,
+        combine(
+            settings.themeMode,
+            settings.weightUnit,
+            settings.groundingEnabled,
+        ) { theme, unit, grounding -> Triple(theme, unit, grounding) },
+    ) { profile, target, hasKey, (theme, unit, grounding) ->
+        SettingsUiState(profile, target, hasKey, theme, unit, grounding)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+
+    private val _connection = MutableStateFlow(ConnectionUiState())
+    val connection = _connection.asStateFlow()
 
     private val _planMessage = MutableStateFlow<String?>(null)
     val planMessage = _planMessage.asStateFlow()
+
+    fun saveApiKey(key: String) {
+        viewModelScope.launch {
+            settings.setApiKey(key)
+            _connection.value = ConnectionUiState(message = "Key saved", success = true)
+        }
+    }
+
+    fun removeApiKey() {
+        viewModelScope.launch {
+            settings.setApiKey("")
+            _connection.value = ConnectionUiState(message = "Key removed", success = true)
+        }
+    }
 
     fun setGroundingEnabled(enabled: Boolean) {
         viewModelScope.launch { settings.setGroundingEnabled(enabled) }
@@ -61,6 +91,28 @@ class SettingsViewModel @Inject constructor(
 
     fun setWeightUnit(unit: WeightUnit) {
         viewModelScope.launch { settings.setWeightUnit(unit) }
+    }
+
+    fun testConnection() {
+        viewModelScope.launch {
+            _connection.value = ConnectionUiState(testing = true)
+            _connection.value = when (val result = tester.test()) {
+                is ConnectionResult.Ok -> ConnectionUiState(
+                    message = if (result.modelAvailable) {
+                        "Connected. ${result.modelCount} models available, including ${result.model}."
+                    } else {
+                        "Key works, but ${result.model} wasn't in the list of " +
+                            "${result.modelCount} models this key can use."
+                    },
+                    success = result.modelAvailable,
+                )
+
+                is ConnectionResult.Failed -> ConnectionUiState(
+                    message = result.message,
+                    success = false,
+                )
+            }
+        }
     }
 
     fun recalculatePlan() {
@@ -108,6 +160,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearMessages() {
+        _connection.update { it.copy(message = null) }
         _planMessage.value = null
     }
 }

@@ -5,11 +5,22 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private fun per100g(kcal: Double, p: Double, c: Double, f: Double) = object : NutritionPer100g {
+private fun per100g(
+    kcal: Double,
+    p: Double,
+    c: Double,
+    f: Double,
+    fibre: Double? = null,
+    sugar: Double? = null,
+    sodium: Double? = null,
+) = object : NutritionPer100g {
     override val kcal100g = kcal
     override val protein100g = p
     override val carbs100g = c
     override val fat100g = f
+    override val fibre100g = fibre
+    override val sugar100g = sugar
+    override val sodiumMg100g = sodium
 }
 
 /** Per 100 g, rounded off real catalogue rows so the numbers stay recognisable. */
@@ -188,6 +199,117 @@ class MealSuggesterTest {
     }
 
     @Test
+    fun `the search finds a pairing a greedy first pick would miss`() {
+        // The best single item is a big serving of chicken; stopping there leaves all the carbs
+        // unpaid. Chicken and rice together is the plate, and it has to be found.
+        val pool = servings("Chicken breast", Per100g.chickenBreast, portionG = 100.0) +
+            servings("Rice", Per100g.rice, portionG = 150.0) +
+            servings("Oil", Per100g.oil, portionG = 10.0)
+
+        val plate = MealSuggester.suggest(gap(kcal = 560.0, p = 50.0, c = 60.0, f = 8.0), pool).first()
+
+        assertEquals(setOf("Chicken breast", "Rice"), plate.items.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `at most four plates, all different`() {
+        val pool = servings("Paneer", Per100g.paneer, portionG = 100.0) +
+            servings("Chicken breast", Per100g.chickenBreast, portionG = 100.0) +
+            servings("Rice", Per100g.rice, portionG = 150.0) +
+            servings("Roti", Per100g.roti, portionG = 40.0, label = "1 roti") +
+            servings("Oil", Per100g.oil, portionG = 10.0)
+
+        val plates = MealSuggester.suggest(gap(kcal = 700.0, p = 45.0, c = 70.0, f = 22.0), pool)
+
+        assertEquals(4, plates.size)
+        val sets = plates.map { plate -> plate.items.map { it.source }.toSet() }
+        assertEquals(sets.size, sets.distinct().size)
+    }
+
+    @Test
+    fun `what was already eaten today gives way to an equal alternative`() {
+        val chicken = servings("Chicken breast", Per100g.chickenBreast, portionG = 100.0)
+        // Same numbers, different food: only the diary can separate them.
+        val turkey = servings("Turkey breast", Per100g.chickenBreast, portionG = 100.0)
+        val context = PlateContext(eatenToday = setOf(chicken.first().source))
+
+        val plate = MealSuggester.suggest(gap(165.0, 31.0, 0.0, 3.6), chicken + turkey, context).first()
+
+        assertEquals("Turkey breast", plate.items.first().name)
+        assertTrue(PlateTag.HAD_TODAY !in plate.tags)
+    }
+
+    @Test
+    fun `a food eaten at this meal beats a twin that never is`() {
+        val poha = servings("Poha", Per100g.rice, portionG = 150.0)
+        val rice = servings("Rice", Per100g.rice, portionG = 150.0)
+        val context = PlateContext(
+            affinity = mapOf(
+                poha.first().source to SlotCount(atThisMeal = 12, total = 12),
+                rice.first().source to SlotCount(atThisMeal = 0, total = 20),
+            ),
+        )
+
+        val plate = MealSuggester.suggest(gap(200.0, 4.0, 42.0, 0.5), rice + poha, context).first()
+
+        assertEquals("Poha", plate.items.first().name)
+        assertTrue(PlateTag.USUAL_FOR_MEAL in plate.tags)
+    }
+
+    @Test
+    fun `fibre separates two plates that fit alike`() {
+        val white = servings("White rice", per100g(130.0, 2.7, 28.0, 0.3, fibre = 0.4), portionG = 150.0)
+        val brown = servings("Brown rice", per100g(130.0, 2.7, 28.0, 0.3, fibre = 3.5), portionG = 150.0)
+
+        val plate = MealSuggester.suggest(
+            gap(200.0, 4.0, 42.0, 0.5),
+            white + brown,
+            PlateContext(fibreNeedG = 8.0),
+        ).first()
+
+        assertEquals("Brown rice", plate.items.first().name)
+    }
+
+    @Test
+    fun `good micros never rescue a plate that misses the macros`() {
+        // A protein gap. Lentil-like fibre bomb with little protein against plain chicken.
+        val fibrous = servings("Bran", per100g(200.0, 5.0, 40.0, 2.0, fibre = 30.0, sugar = 1.0, sodium = 5.0), portionG = 100.0)
+        val chicken = servings("Chicken breast", per100g(165.0, 31.0, 0.0, 3.6, fibre = 0.0, sugar = 0.0, sodium = 900.0), portionG = 100.0)
+
+        val plate = MealSuggester.suggest(
+            gap(330.0, 60.0, 5.0, 7.0),
+            fibrous + chicken,
+            PlateContext(fibreNeedG = 10.0, sodiumRoomMg = 300.0),
+        ).first()
+
+        assertEquals("Chicken breast", plate.items.first().name)
+    }
+
+    @Test
+    fun `a stranger from the catalogue loses a tie to food the user eats`() {
+        val known = servings("Chicken breast", Per100g.chickenBreast, portionG = 100.0)
+        val stranger = Servings.ofFood(
+            source = ServingSource.Food(++nextId),
+            name = "Chicken tikka",
+            per100g = Per100g.chickenBreast,
+            defaultPortionG = 100.0,
+            portionLabel = null,
+            isNew = true,
+        )
+
+        val plates = MealSuggester.suggest(gap(165.0, 31.0, 0.0, 3.6), stranger + known)
+
+        assertEquals("Chicken breast", plates.first().items.first().name)
+        assertTrue(plates.first { it.items.first().name == "Chicken tikka" }.tags.contains(PlateTag.NEW_FOOD))
+    }
+
+    @Test
+    fun `a counted food can be offered three or four at a time`() {
+        val roti = servings("Roti", Per100g.roti, portionG = 40.0, label = "1 roti")
+        assertTrue("4 roti" in roti.map { it.portionLabel })
+    }
+
+    @Test
     fun `a food with no calories per 100 g offers nothing`() {
         val water = servings("Water", per100g(0.0, 0.0, 0.0, 0.0), portionG = 250.0)
         assertTrue(water.isEmpty())
@@ -261,5 +383,62 @@ class MacroGapTest {
     fun `everything logged still leaves room for a snack`() {
         val all = MealType.entries.toSet()
         assertEquals(listOf(MealType.SNACK), MealBudget.slotsLeft(hour = 20, alreadyLogged = all))
+    }
+    @Test
+    fun `with no history the textbook split stands`() {
+        val shares = MealBudget.learnShares(emptyList())
+        assertEquals(0.25, shares.getValue(MealType.BREAKFAST), 1e-9)
+    }
+
+    @Test
+    fun `a fortnight of small breakfasts shrinks breakfast`() {
+        val day = mapOf(
+            MealType.BREAKFAST to 200.0,
+            MealType.LUNCH to 800.0,
+            MealType.SNACK to 200.0,
+            MealType.DINNER to 800.0,
+        )
+        val shares = MealBudget.learnShares(List(14) { day })
+
+        // Observed 0.10; fourteen days moves two thirds of the way from 0.25.
+        assertEquals(0.15, shares.getValue(MealType.BREAKFAST), 0.01)
+        assertEquals(1.0, shares.values.sum(), 1e-9)
+    }
+
+    @Test
+    fun `a half-logged day does not redraw the budget`() {
+        val lunchOnly = mapOf(MealType.LUNCH to 600.0)
+        assertEquals(MealBudget.learnShares(emptyList()), MealBudget.learnShares(List(10) { lunchOnly }))
+    }
+
+    @Test
+    fun `a meal the user never eats still keeps a small share`() {
+        val noSnack = mapOf(MealType.BREAKFAST to 500.0, MealType.LUNCH to 800.0, MealType.DINNER to 700.0)
+        val shares = MealBudget.learnShares(List(60) { noSnack })
+        assertTrue(shares.getValue(MealType.SNACK) >= 0.04)
+    }
+
+    @Test
+    fun `learned shares change how much of the rest the next meal gets`() {
+        val gap = MacroGap(kcal = 1000.0, proteinG = 60.0, carbsG = 100.0, fatG = 30.0)
+        val bigDinner = mapOf(
+            MealType.BREAKFAST to 0.25,
+            MealType.LUNCH to 0.35,
+            MealType.SNACK to 0.05,
+            MealType.DINNER to 0.35,
+        )
+        val share = MealBudget.shareFor(gap, hour = 16, shares = bigDinner)
+        assertEquals(125.0, share.gap.kcal, 0.5)
+        assertEquals(0.125, share.fraction, 1e-9)
+    }
+
+    @Test
+    fun `a meal is asked for its share of the fibre still owed`() {
+        val status = DayMicroStatus.of(targetKcal = 2000.0, eaten = Micros(fibreG = 8.0, sodiumMg = 1300.0))
+        val (fibre, sodium) = status.forMeal(0.5)
+
+        assertEquals(28.0, status.fibreTargetG, 1e-9)
+        assertEquals(10.0, fibre, 1e-9)
+        assertEquals(500.0, sodium, 1e-9)
     }
 }

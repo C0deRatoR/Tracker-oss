@@ -40,6 +40,7 @@ import com.yash.tracker.ui.settings.SettingsScreen
 import com.yash.tracker.ui.theme.Decelerate
 import com.yash.tracker.ui.workout.LiveSessionScreen
 import com.yash.tracker.ui.workout.SessionSummaryScreen
+import com.yash.tracker.ui.workout.TrainingReportScreen
 import com.yash.tracker.ui.workout.WorkoutScreen
 
 /** Switching tabs is a dissolve, not a journey: nothing slides sideways between peers. */
@@ -143,7 +144,14 @@ fun AppNavHost() {
                     onStartRoutine = { navController.navigate(LiveSession(it)) },
                     onBrowseExercises = { navController.navigate(ExerciseLibrary) },
                     onOpenSession = { navController.navigate(SessionSummary(it)) },
+                    onOpenReport = { navController.navigate(TrainingAnalysis) },
                 )
+            }
+            composable<TrainingAnalysis>(
+                enterTransition = { pushEnter },
+                popExitTransition = { pushExit },
+            ) {
+                TrainingReportScreen(onBack = { navController.popBackStack() })
             }
             composable<ExerciseLibrary>(
                 enterTransition = { pushEnter },

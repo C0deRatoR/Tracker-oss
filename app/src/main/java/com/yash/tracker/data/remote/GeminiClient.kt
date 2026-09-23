@@ -14,6 +14,8 @@ import com.yash.tracker.data.remote.dto.RecognizedMealDto
 import com.yash.tracker.data.remote.dto.ResponseFormat
 import com.yash.tracker.data.remote.dto.ResponseFormatText
 import com.yash.tracker.data.remote.dto.Tool
+import com.yash.tracker.data.remote.prompts.CoachNote
+import com.yash.tracker.data.remote.prompts.CoachNoteDto
 import com.yash.tracker.data.remote.prompts.MealRecognition
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -54,6 +56,16 @@ private sealed interface JsonReply {
     data class Failed(val kind: FailureKind, val message: String) : JsonReply
 }
 
+sealed interface CoachOutcome {
+    data class Success(val note: String, val fromCache: Boolean) : CoachOutcome
+    data class Failure(val kind: FailureKind, val message: String) : CoachOutcome
+}
+
+/** The one thing a screen needs from Gemini to explain itself, so it can be faked in tests. */
+fun interface CoachNotes {
+    suspend fun coachNote(findingsJson: String): CoachOutcome
+}
+
 /**
  * Wraps generateContent with the policy from TRD §5.5 and §5.6: cache by prompt hash, one
  * retry with a stricter instruction on a malformed reply, and a plain-language message for
@@ -66,7 +78,7 @@ class GeminiClient @Inject constructor(
     private val auth: GeminiAuth,
     private val cache: AiCacheDao,
     private val io: CoroutineDispatcher,
-) {
+) : CoachNotes {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     suspend fun recognizeText(
@@ -121,7 +133,8 @@ class GeminiClient @Inject constructor(
         val route = auth.route(model)
             ?: return@withContext RecognitionOutcome.Failure(
                 FailureKind.NO_AUTH,
-                "Couldn't reach the photo service. Check your connection.",
+                "Couldn't reach the photo service. Check your connection, or add your own " +
+                    "Gemini key in Settings.",
             )
         // Keyed on the prompt's version rather than its text: the text carries the user's
         // profile and their recent corrections, and hashing that emptied the cache every time
@@ -192,7 +205,8 @@ class GeminiClient @Inject constructor(
         val model = config.model()
         val route = auth.route(model) ?: return@withContext LabelOutcome.Failure(
             FailureKind.NO_AUTH,
-            "Couldn't reach the label service. Check your connection.",
+            "Couldn't reach the label service. Check your connection, or add your own " +
+                "Gemini key in Settings.",
         )
 
         val hash = sha256("${LabelParsing.PROMPT_VERSION}|label:${sha256(jpegBase64)}")
@@ -237,6 +251,63 @@ class GeminiClient @Inject constructor(
         LabelOutcome.Success(label)
     }
 
+    /**
+     * A few sentences on findings the app has already calculated — see [CoachNote].
+     *
+     * Only ever asked for when the user taps for one, so a card never spends quota by being
+     * scrolled past. Cached on the findings themselves: the same day and the same plates get
+     * the same note without a second call.
+     */
+    override suspend fun coachNote(findingsJson: String): CoachOutcome = withContext(io) {
+        val model = config.model()
+        val route = auth.route(model) ?: return@withContext CoachOutcome.Failure(
+            FailureKind.NO_AUTH,
+            "Couldn't reach the coach. Check your connection.",
+        )
+        val hash = sha256("${CoachNote.PROMPT_VERSION}|coach:${sha256(findingsJson)}")
+
+        cache.find(model, hash, System.currentTimeMillis() - CACHE_TTL_MS)?.let { hit ->
+            parseNote(hit.responseJson)?.let { return@withContext CoachOutcome.Success(it, fromCache = true) }
+        }
+
+        val parts = listOf(Part(text = findingsJson))
+        var reply = requestJson(route, parts, CoachNote.SYSTEM_PROMPT, CoachNote.SCHEMA, grounded = false)
+        var note = (reply as? JsonReply.Ok)?.let { parseNote(it.json) }
+        // One retry with the schema restated, as for meals: a bad reply is usually recoverable.
+        if (reply is JsonReply.Ok && note == null) {
+            reply = requestJson(
+                route,
+                parts,
+                CoachNote.STRICTER_RETRY + CoachNote.SYSTEM_PROMPT,
+                CoachNote.SCHEMA,
+                grounded = false,
+            )
+            note = (reply as? JsonReply.Ok)?.let { parseNote(it.json) }
+        }
+
+        when {
+            reply is JsonReply.Failed -> CoachOutcome.Failure(reply.kind, reply.message)
+            note == null -> CoachOutcome.Failure(FailureKind.MALFORMED, "Gemini sent a note that couldn't be read.")
+            else -> {
+                cache.put(
+                    AiCacheEntity(
+                        model = model,
+                        promptHash = hash,
+                        responseJson = json.encodeToString(CoachNoteDto(note)),
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                )
+                CoachOutcome.Success(note, fromCache = false)
+            }
+        }
+    }
+
+    /** A usable note or nothing: empty, runaway or unparseable replies are all treated alike. */
+    private fun parseNote(raw: String): String? = runCatching {
+        val cleaned = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        json.decodeFromString<CoachNoteDto>(cleaned).note.trim()
+    }.getOrNull()?.takeIf { it.isNotEmpty() && it.length <= CoachNote.MAX_CHARS }
+
     /** The shared half: send the request, survive the failure matrix, hand back the text. */
     private suspend fun requestJson(
         route: GeminiRoute,
@@ -270,7 +341,11 @@ class GeminiClient @Inject constructor(
         }
 
         if (!response.isSuccessful) {
-            val failure = httpFailure(response.code(), response.errorBody()?.string().orEmpty())
+            val failure = httpFailure(
+                response.code(),
+                response.errorBody()?.string().orEmpty(),
+                route.ownKey,
+            )
             return JsonReply.Failed(failure.kind, failure.message)
         }
 
@@ -292,13 +367,21 @@ class GeminiClient @Inject constructor(
         return JsonReply.Ok(text)
     }
 
-    private fun httpFailure(code: Int, body: String): RecognitionOutcome.Failure = when {
-        // Always our problem rather than the user's: an expired sign-in, or a proxy whose key
-        // has gone bad. There is nothing for them to fix, so the advice is simply to retry.
+    private fun httpFailure(code: Int, body: String, ownKey: Boolean): RecognitionOutcome.Failure = when {
+        // A bad key returns 400 with API_KEY_INVALID — but so does a malformed request, with
+        // INVALID_ARGUMENT. Blaming the key for both sends you to Settings to fix a good key.
         code == 401 || code == 403 || (code == 400 && body.contains("API_KEY_INVALID")) ->
             RecognitionOutcome.Failure(
                 FailureKind.KEY_REJECTED,
-                "Couldn't authenticate with the photo service. Try again in a moment.",
+                // On the borrowed key this is our problem, not theirs — an expired sign-in or
+                // a proxy whose own key has gone bad. Either way Settings holds nothing they
+                // could fix, so the advice is to retry and the offer is to opt out.
+                if (ownKey) {
+                    "Your Gemini key was rejected. Check it in Settings."
+                } else {
+                    "Couldn't authenticate with the photo service. Try again, or add your " +
+                        "own Gemini key in Settings."
+                },
             )
 
         code == 400 -> {

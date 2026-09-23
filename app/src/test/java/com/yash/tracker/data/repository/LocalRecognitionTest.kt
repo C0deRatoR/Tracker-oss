@@ -83,6 +83,7 @@ class LocalRecognitionTest {
     }
 
     private class FakeConfig(var grounding: Boolean = true) : GeminiConfig {
+        override suspend fun apiKey() = "test-key"
         override suspend fun model() = "gemini-3.5-flash-lite"
         override suspend fun isGroundingEnabled() = grounding
     }
@@ -105,7 +106,7 @@ class LocalRecognitionTest {
             client = GeminiClient(
                 service,
                 FakeConfig(),
-                GeminiAuth(object : AppIdentity {
+                GeminiAuth(FakeConfig(), object : AppIdentity {
                     override suspend fun token() = "test-token"
                 }),
                 db.aiCacheDao(),

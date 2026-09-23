@@ -1,5 +1,6 @@
 package com.yash.tracker.data.repository
 
+import com.yash.tracker.data.local.dao.HistorySetRow
 import com.yash.tracker.data.local.dao.MuscleRecency
 import com.yash.tracker.data.local.dao.PreviousSet
 import com.yash.tracker.data.local.dao.RoutineWithExercises
@@ -15,6 +16,7 @@ import com.yash.tracker.data.local.entity.isLogged
 import com.yash.tracker.domain.diary.DiaryDate
 import com.yash.tracker.domain.workout.AnalysedSet
 import com.yash.tracker.domain.workout.Effort
+import com.yash.tracker.domain.workout.HistorySet
 import com.yash.tracker.domain.workout.MetCalories
 import com.yash.tracker.domain.workout.MuscleStanding
 import com.yash.tracker.domain.workout.NextWorkout
@@ -25,9 +27,14 @@ import com.yash.tracker.domain.workout.ScoredSet
 import com.yash.tracker.domain.workout.SessionAnalysis
 import com.yash.tracker.domain.workout.SessionAnalyst
 import com.yash.tracker.domain.workout.SessionChange
+import com.yash.tracker.domain.workout.TemplateRoutine
+import com.yash.tracker.domain.workout.TrainingAnalyst
+import com.yash.tracker.domain.workout.TrainingReport
 import com.yash.tracker.domain.workout.VolumeCalculator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -102,6 +109,34 @@ class WorkoutRepository @Inject constructor(
             targetRepsLow = null,
             targetRepsHigh = null,
         )
+    }
+
+    /**
+     * Turns a template into routines, one per training day, with its sets and rep targets.
+     *
+     * Names are resolved against the catalogue here rather than baked in as ids, because ids
+     * are only stable within one install. A name the catalogue no longer has is skipped rather
+     * than failing the rest of the day.
+     */
+    suspend fun addTemplate(routines: List<TemplateRoutine>): List<Long> = withContext(io) {
+        val byName = dao.allExercises().associateBy { it.name.lowercase() }
+        routines.map { routine ->
+            dao.insertRoutineWithExercises(
+                routine = RoutineEntity(name = routine.name, note = null, createdAt = System.currentTimeMillis()),
+                exercises = routine.exercises
+                    .mapNotNull { planned -> byName[planned.name.lowercase()]?.let { it to planned } }
+                    .mapIndexed { index, (exercise, planned) ->
+                        RoutineExerciseEntity(
+                            routineId = 0,
+                            exerciseId = exercise.id,
+                            position = index,
+                            targetSets = planned.sets,
+                            targetRepsLow = planned.repsLow,
+                            targetRepsHigh = planned.repsHigh,
+                        )
+                    },
+            )
+        }
     }
 
     suspend fun deleteRoutine(id: Long) = withContext(io) { dao.deleteRoutine(id) }
@@ -344,8 +379,35 @@ class WorkoutRepository @Inject constructor(
             )
         }
 
-        SessionAnalyst.analyse(sets, previousBests, change)
+        val endedAt = loaded.session.endedAt ?: System.currentTimeMillis()
+        val catalogue = dao.allExercises()
+        val breakdown = TrainingAnalyst.analyse(
+            dao.historySetsForSession(sessionId).map { it.toHistorySet() },
+            now = endedAt,
+            catalogue = catalogue,
+        )
+        val week = TrainingAnalyst.analyse(
+            dao.historySetsBetween(endedAt - TrainingAnalyst.HISTORY_MS, endedAt).map { it.toHistorySet() },
+            now = endedAt,
+            catalogue = catalogue,
+        )
+
+        SessionAnalyst.analyse(sets, previousBests, change).copy(breakdown = breakdown, week = week)
     }
+
+    /**
+     * The rolling week, re-read whenever a set is logged.
+     *
+     * Like [observeNextWorkout], the clock is read once per subscription: the window moves a
+     * day at a time and the screen is re-subscribed long before that matters.
+     */
+    fun observeTrainingReport(now: Long = System.currentTimeMillis()): Flow<TrainingReport> =
+        combine(
+            dao.observeHistorySets(now - TrainingAnalyst.HISTORY_MS),
+            dao.observeExercises(),
+        ) { rows, catalogue ->
+            TrainingAnalyst.analyse(rows.map { it.toHistorySet() }, now, catalogue)
+        }.flowOn(io)
 
     /**
      * What is due, recomputed whenever a set changes.
@@ -399,6 +461,27 @@ class WorkoutRepository @Inject constructor(
  * that finished at ten last night is fourteen hours old, and calling it "yesterday" would have
  * the app suggesting the same muscle group again over breakfast.
  */
+private fun HistorySetRow.toHistorySet() = HistorySet(
+    sessionId = sessionId,
+    startedAt = startedAt,
+    exerciseId = exerciseId,
+    exerciseName = exerciseName,
+    muscleGroup = muscleGroup,
+    primaryMuscles = primaryMuscles.lines(),
+    secondaryMuscles = secondaryMuscles.lines(),
+    force = force,
+    mechanic = mechanic,
+    equipment = equipment,
+    reps = reps,
+    weightKg = weightKg,
+    rpe = rpe,
+    durationSec = durationSec,
+)
+
+/** The same newline-delimited shape [ExerciseEntity] stores its muscle lists in. */
+private fun String?.lines(): List<String> =
+    this?.split('\n')?.map(String::trim)?.filter(String::isNotEmpty).orEmpty()
+
 private fun MuscleRecency.toStanding(now: Long) = MuscleStanding(
     group = muscleGroup,
     daysSince = ((now - lastTrainedAt) / (24L * 60 * 60 * 1000)).toInt().coerceAtLeast(0),

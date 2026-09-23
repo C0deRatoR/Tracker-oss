@@ -7,6 +7,8 @@ import com.yash.tracker.data.local.dao.EntryWithItems
 import com.yash.tracker.data.local.dao.MealWithItems
 import com.yash.tracker.data.local.entity.TargetEntity
 import com.yash.tracker.data.local.entity.WorkoutSessionEntity
+import com.yash.tracker.data.remote.CoachNotes
+import com.yash.tracker.data.remote.prompts.CoachNote
 import com.yash.tracker.data.repository.LogRepository
 import com.yash.tracker.data.repository.MealRepository
 import com.yash.tracker.data.repository.ProfileRepository
@@ -16,7 +18,10 @@ import com.yash.tracker.domain.diary.DiaryDate
 import com.yash.tracker.domain.diary.MealType
 import com.yash.tracker.domain.nutrition.MacroSuggestion
 import com.yash.tracker.domain.nutrition.Macros
+import com.yash.tracker.domain.nutrition.Micros
 import com.yash.tracker.domain.nutrition.Plate
+import com.yash.tracker.ui.coach.CoachNoteState
+import com.yash.tracker.ui.coach.ask
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +32,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -66,6 +72,7 @@ class DashboardViewModel @Inject constructor(
     private val suggestionRepository: SuggestionRepository,
     profileRepository: ProfileRepository,
     workoutRepository: WorkoutRepository,
+    private val coach: CoachNotes,
 ) : ViewModel() {
 
     /** Null means "follow today", so the dashboard rolls over without being re-opened. */
@@ -112,6 +119,9 @@ class DashboardViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
+    private val _coachNote = MutableStateFlow<CoachNoteState>(CoachNoteState.Idle)
+    val coachNote: StateFlow<CoachNoteState> = _coachNote
+
     /**
      * What the day still has room for, recomputed as the diary changes.
      *
@@ -123,6 +133,7 @@ class DashboardViewModel @Inject constructor(
         .map { current ->
             SuggestionInput(
                 target = current.target.takeIf { current.isToday },
+                date = current.date,
                 totals = current.totals,
                 loggedMeals = current.entries.mapNotNullTo(mutableSetOf()) { entry ->
                     runCatching { MealType.valueOf(entry.entry.mealType) }.getOrNull()
@@ -130,6 +141,8 @@ class DashboardViewModel @Inject constructor(
             )
         }
         .distinctUntilChanged()
+        // A new set of plates makes the old explanation wrong, so it goes with them.
+        .onEach { _coachNote.value = CoachNoteState.Idle }
         .mapLatest { input ->
             val target = input.target ?: return@mapLatest null
             suggestionRepository.suggest(
@@ -142,9 +155,20 @@ class DashboardViewModel @Inject constructor(
                 ),
                 hour = LocalTime.now().hour,
                 alreadyLogged = input.loggedMeals,
+                date = input.date,
+                eatenMicros = Micros(
+                    fibreG = input.totals.fibreG,
+                    sugarG = input.totals.sugarG,
+                    sodiumMg = input.totals.sodiumMg,
+                ),
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun explainSuggestion() {
+        val plates = suggestion.value as? MacroSuggestion.Plates ?: return
+        viewModelScope.launch { _coachNote.ask(coach, CoachNote.forMeal(plates)) }
+    }
 
     fun logSuggestion(meal: MealType, plate: Plate) {
         viewModelScope.launch { suggestionRepository.logPlate(state.value.date, meal, plate) }
@@ -186,6 +210,7 @@ class DashboardViewModel @Inject constructor(
 /** Only the parts of the day a suggestion actually depends on. */
 private data class SuggestionInput(
     val target: TargetEntity?,
+    val date: LocalDate,
     val totals: DayTotals,
     val loggedMeals: Set<MealType>,
 )

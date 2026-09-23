@@ -125,6 +125,7 @@ fun DashboardScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val savedMeals by viewModel.savedMeals.collectAsStateWithLifecycle()
     val suggestion by viewModel.suggestion.collectAsStateWithLifecycle()
+    val coachNote by viewModel.coachNote.collectAsStateWithLifecycle()
     // Hoisted so the list can leave the banner's slot out entirely rather than laying out an
     // empty item and the gaps either side of it.
     val reminder: BackupReminderViewModel = hiltViewModel()
@@ -229,7 +230,16 @@ fun DashboardScreen(
                 item { StaggerIn(5) { HydrationCard(state, viewModel) } }
 
                 suggestion?.let { next ->
-                    item { StaggerIn(6) { SuggestionCard(next, viewModel::logSuggestion) } }
+                    item {
+                        StaggerIn(6) {
+                            SuggestionCard(
+                                suggestion = next,
+                                onLog = viewModel::logSuggestion,
+                                coachNote = coachNote,
+                                onExplain = viewModel::explainSuggestion,
+                            )
+                        }
+                    }
                 }
 
                 state.workout?.let { session ->

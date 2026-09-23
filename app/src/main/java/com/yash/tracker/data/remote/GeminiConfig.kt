@@ -3,10 +3,11 @@ package com.yash.tracker.data.remote
 /**
  * The only things a call needs from Settings.
  *
- * Narrowing it to this also gives tests a seam: the real implementation reads DataStore,
- * which does not exist off-device.
+ * Narrowing it to this also gives tests a seam: the real implementation reads the key out of
+ * the Android Keystore, which does not exist off-device.
  */
 interface GeminiConfig {
+    suspend fun apiKey(): String?
     suspend fun model(): String
 
     /**

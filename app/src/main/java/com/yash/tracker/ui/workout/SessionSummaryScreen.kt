@@ -41,9 +41,12 @@ import com.yash.tracker.ui.components.PillButton
 import com.yash.tracker.ui.components.PillTone
 import com.yash.tracker.ui.components.SoftCard
 import com.yash.tracker.ui.components.StaggerIn
+import com.yash.tracker.ui.components.ValueRow
 import com.yash.tracker.ui.components.shareText
 import com.yash.tracker.domain.workout.ExerciseTrend
 import com.yash.tracker.domain.workout.MuscleShare
+import com.yash.tracker.domain.workout.TrainingReport
+import com.yash.tracker.domain.workout.TrainingSuggestion
 import com.yash.tracker.domain.workout.Trend
 import com.yash.tracker.domain.workout.readable
 import com.yash.tracker.ui.components.SplitBar
@@ -173,6 +176,54 @@ private fun AgainstLastTimeCard(movers: List<ExerciseTrend>, notes: List<String>
 }
 
 /**
+ * This session muscle by muscle — secondary work at half a set — and how hard it was.
+ *
+ * The coarse split above says "legs"; this says whether legs meant quads alone.
+ */
+@Composable
+private fun SessionDetailCard(breakdown: TrainingReport) {
+    Column {
+        GroupHeader("Muscle by muscle")
+        Spacer(Modifier.height(10.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp)) {
+                MuscleBars(breakdown.muscles.filter { it.sets > 0 }.sortedByDescending { it.sets })
+                Spacer(Modifier.height(14.dp))
+                Hairline()
+                Spacer(Modifier.height(8.dp))
+                val bands = breakdown.repBands
+                ValueRow("Rep ranges", "${bands.strength} heavy · ${bands.hypertrophy} mid · ${bands.endurance} light")
+                ValueRow("Push / pull", "${breakdown.pushSets} / ${breakdown.pullSets} sets")
+                breakdown.averageRpe?.let { ValueRow("Average RPE", "%.1f".format(it)) }
+            }
+        }
+    }
+}
+
+/** The top of the week's list, so the next session can be planned from this screen. */
+@Composable
+private fun WeekStillNeedsCard(suggestions: List<TrainingSuggestion>) {
+    Column {
+        GroupHeader("What the week still needs")
+        Spacer(Modifier.height(10.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp)) {
+                suggestions.take(WEEK_SUGGESTIONS).forEachIndexed { index, suggestion ->
+                    if (index > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    SuggestionLine(suggestion)
+                }
+            }
+        }
+    }
+}
+
+private const val WEEK_SUGGESTIONS = 3
+
+/**
  * What the session achieved. PRs get a mention but not a celebration — PRD §4 is explicit
  * that this is a measuring instrument, so no confetti.
  */
@@ -287,6 +338,16 @@ fun SessionSummaryScreen(
                 if (movers.isNotEmpty() || analysis.notes.isNotEmpty()) {
                     Spacer(Modifier.height(24.dp))
                     StaggerIn(4) { AgainstLastTimeCard(movers, analysis.notes) }
+                }
+
+                analysis.breakdown?.takeIf { !it.isEmpty }?.let { breakdown ->
+                    Spacer(Modifier.height(24.dp))
+                    StaggerIn(4) { SessionDetailCard(breakdown) }
+                }
+
+                analysis.week?.suggestions?.takeIf { it.isNotEmpty() }?.let { suggestions ->
+                    Spacer(Modifier.height(24.dp))
+                    StaggerIn(4) { WeekStillNeedsCard(suggestions) }
                 }
             }
 

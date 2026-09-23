@@ -31,6 +31,8 @@ class SettingsRepository @Inject constructor(
 ) : GeminiConfig, BackupCodeStore {
     private val store = context.dataStore
 
+    val hasApiKey: Flow<Boolean> = store.data.map { !it[API_KEY].isNullOrBlank() }
+
     val themeMode: Flow<ThemeMode> = store.data.map {
         runCatching { ThemeMode.valueOf(it[THEME] ?: ThemeMode.LIGHT.name) }
             .getOrDefault(ThemeMode.LIGHT)
@@ -48,9 +50,25 @@ class SettingsRepository @Inject constructor(
 
     val groundingEnabled: Flow<Boolean> = store.data.map { it[GROUNDING] ?: true }
 
+    override suspend fun apiKey(): String? {
+        val stored = store.data.first()[API_KEY] ?: return null
+        return secureKeyStore.decrypt(stored)
+    }
+
     override suspend fun model(): String = DEFAULT_MODEL
 
     override suspend fun isGroundingEnabled(): Boolean = groundingEnabled.first()
+
+    suspend fun setApiKey(key: String) {
+        val trimmed = key.trim()
+        store.edit { prefs ->
+            if (trimmed.isEmpty()) {
+                prefs.remove(API_KEY)
+            } else {
+                prefs[API_KEY] = secureKeyStore.encrypt(trimmed)
+            }
+        }
+    }
 
     suspend fun setThemeMode(mode: ThemeMode) = store.edit { it[THEME] = mode.name }
 
@@ -80,6 +98,7 @@ class SettingsRepository @Inject constructor(
         // model list.
         const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
+        val API_KEY = stringPreferencesKey("gemini_api_key")
         val THEME = stringPreferencesKey("theme_mode")
         val WEIGHT_UNIT = stringPreferencesKey("weight_unit")
         val HEIGHT_UNIT = stringPreferencesKey("height_unit")

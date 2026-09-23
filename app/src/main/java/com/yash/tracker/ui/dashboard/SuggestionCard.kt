@@ -2,6 +2,8 @@ package com.yash.tracker.ui.dashboard
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yash.tracker.domain.diary.MealType
+import com.yash.tracker.domain.nutrition.DayMicroStatus
 import com.yash.tracker.domain.nutrition.MacroGap
 import com.yash.tracker.domain.nutrition.MacroSuggestion
 import com.yash.tracker.domain.nutrition.Plate
+import com.yash.tracker.domain.nutrition.PlateTag
+import com.yash.tracker.ui.coach.CoachNoteBlock
+import com.yash.tracker.ui.coach.CoachNoteState
 import com.yash.tracker.ui.components.ActionTone
 import com.yash.tracker.ui.components.Hairline
 import com.yash.tracker.ui.components.IconPlate
@@ -38,7 +44,12 @@ import kotlin.math.roundToInt
  * diary because the point of the card is to save the search, not to start one.
  */
 @Composable
-fun SuggestionCard(suggestion: MacroSuggestion, onLog: (MealType, Plate) -> Unit) {
+fun SuggestionCard(
+    suggestion: MacroSuggestion,
+    onLog: (MealType, Plate) -> Unit,
+    coachNote: CoachNoteState = CoachNoteState.Idle,
+    onExplain: () -> Unit = {},
+) {
     LuxCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -66,13 +77,22 @@ fun SuggestionCard(suggestion: MacroSuggestion, onLog: (MealType, Plate) -> Unit
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    suggestion.micros?.let { micros ->
+                        Text(
+                            microLine(micros),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     suggestion.plates.forEach { plate ->
                         Spacer(Modifier.height(10.dp))
                         Hairline()
                         Spacer(Modifier.height(10.dp))
-                        PlateRow(plate) { onLog(suggestion.meal, plate) }
+                        PlateRow(plate, suggestion.meal) { onLog(suggestion.meal, plate) }
                     }
+                    Spacer(Modifier.height(14.dp))
+                    CoachNoteBlock(coachNote, onExplain)
                 }
 
                 // The three ways of having nothing to suggest all say so in the subheading;
@@ -86,8 +106,9 @@ fun SuggestionCard(suggestion: MacroSuggestion, onLog: (MealType, Plate) -> Unit
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlateRow(plate: Plate, onLog: () -> Unit) {
+private fun PlateRow(plate: Plate, meal: MealType, onLog: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -105,6 +126,20 @@ private fun PlateRow(plate: Plate, onLog: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (plate.tags.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    PlateTag.entries.filter { it in plate.tags }.forEach { tag ->
+                        Pill(
+                            tag.label(meal),
+                            tone = if (tag == PlateTag.NEW_FOOD) PillTone.Accent else PillTone.Quiet,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.width(10.dp))
         SmallAction(text = "Log", onClick = onLog, tone = ActionTone.Soft)
@@ -119,9 +154,14 @@ private fun heading(suggestion: MacroSuggestion): String = when (suggestion) {
 }
 
 private fun subheading(suggestion: MacroSuggestion): String = when (suggestion) {
-    is MacroSuggestion.Plates -> "From what you actually eat"
+    is MacroSuggestion.Plates ->
+        if (suggestion.plates.any { PlateTag.NEW_FOOD in it.tags }) {
+            "From what you eat, plus a few new ideas"
+        } else {
+            "From what you actually eat"
+        }
     is MacroSuggestion.NothingFits ->
-        "Nothing you have logged before fits in what's left"
+        "Nothing you eat, or in the catalogue, fits in what's left"
     MacroSuggestion.DayDone -> "Nothing left worth planning a meal around"
     MacroSuggestion.NoHistoryYet -> "Log a few meals and suggestions start here"
 }
@@ -131,5 +171,19 @@ private fun gapLine(gap: MacroGap): String =
     "Room for P ${gap.proteinG.roundToInt()} g · " +
         "C ${gap.carbsG.roundToInt()} g · " +
         "F ${gap.fatG.roundToInt()} g"
+
+/** Fibre against the day's line, and how much salt is left — the two micros a day runs out of. */
+private fun microLine(micros: DayMicroStatus): String = buildString {
+    append("Fibre ${(micros.fibreEatenG ?: 0.0).roundToInt()} of ${micros.fibreTargetG.roundToInt()} g")
+    micros.sodiumLeftMg?.let { append(" · Salt ${it.roundToInt()} mg left") }
+}
+
+private fun PlateTag.label(meal: MealType): String = when (this) {
+    PlateTag.CLOSES_PROTEIN -> "Closes protein"
+    PlateTag.ADDS_FIBRE -> "Adds fibre"
+    PlateTag.USUAL_FOR_MEAL -> "Your usual ${meal.readable().lowercase()}"
+    PlateTag.NEW_FOOD -> "New to you"
+    PlateTag.HAD_TODAY -> "Had today"
+}
 
 private fun MealType.readable(): String = name.lowercase().replaceFirstChar(Char::uppercase)

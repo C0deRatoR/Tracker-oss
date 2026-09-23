@@ -172,13 +172,9 @@ is unaffected today.
 **Status:** built. `server/` holds one Gemini key and forwards `generateContent` untouched.
 The app signs in anonymously to Firebase and sends that ID token; the proxy verifies it
 against this project and refuses everything else, so a stripped APK is not a free Gemini
-endpoint.
-
-The Settings key field is gone too, on request. It survived the first cut as an escape hatch —
-the user's own quota, and a way around a proxy outage — but asking someone to go and fetch an
-API key is exactly the friction the proxy exists to delete, and keeping it meant carrying a
-second route through every failure message for the few who would ever have used it. The cost
-is stated plainly: no proxy, no photo logging, and no way for a user to route around it.
+endpoint. A key set in Settings still wins and still goes straight to Google — it is the
+user's quota, it has no business crossing our server, and it is what keeps photo logging
+alive on a day the proxy is down.
 
 **Rejected:** shipping six free keys in the APK and rotating them. Three reasons, in order of
 how much they mattered. The keys are extractable — R8 renames symbols, not string constants,

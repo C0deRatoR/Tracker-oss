@@ -21,6 +21,15 @@ data class EntryWithItems(
 
 data class DayKcal(val date: String, val kcal: Double)
 
+/** One meal's calories on one day, for learning how this user splits a day. */
+data class MealKcal(val date: String, val mealType: String, val kcal: Double)
+
+/** How many entries at one meal carried a given food or product. Exactly one id is set. */
+data class SourceAtMeal(val foodId: Long?, val productId: Long?, val mealType: String, val times: Int)
+
+/** A food or product that appears on a day. Exactly one id is set. */
+data class SourceRef(val foodId: Long?, val productId: Long?)
+
 /** A day's totals with the date attached, for trends over a range. */
 data class DayMacros(
     val date: String,
@@ -145,4 +154,34 @@ interface LogDao {
 
     @Query("DELETE FROM water_log WHERE id = (SELECT id FROM water_log WHERE date = :date ORDER BY logged_at DESC LIMIT 1)")
     suspend fun removeLastWater(date: String)
+
+    @Query(
+        """
+        SELECT date, meal_type AS mealType, COALESCE(SUM(kcal), 0.0) AS kcal
+        FROM log_entry WHERE date BETWEEN :from AND :to
+        GROUP BY date, meal_type
+        """,
+    )
+    suspend fun mealKcalByDay(from: String, to: String): List<MealKcal>
+
+    /** Counted per entry, not per row: two roti on one plate is one lunch with roti in it. */
+    @Query(
+        """
+        SELECT li.food_id AS foodId, li.product_id AS productId, le.meal_type AS mealType,
+               COUNT(DISTINCT le.id) AS times
+        FROM log_item li JOIN log_entry le ON le.id = li.entry_id
+        WHERE le.date >= :from AND (li.food_id IS NOT NULL OR li.product_id IS NOT NULL)
+        GROUP BY li.food_id, li.product_id, le.meal_type
+        """,
+    )
+    suspend fun mealAffinity(from: String): List<SourceAtMeal>
+
+    @Query(
+        """
+        SELECT DISTINCT li.food_id AS foodId, li.product_id AS productId
+        FROM log_item li JOIN log_entry le ON le.id = li.entry_id
+        WHERE le.date = :date AND (li.food_id IS NOT NULL OR li.product_id IS NOT NULL)
+        """,
+    )
+    suspend fun sourcesOn(date: String): List<SourceRef>
 }

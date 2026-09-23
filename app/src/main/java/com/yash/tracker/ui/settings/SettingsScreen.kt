@@ -68,10 +68,13 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val connection by viewModel.connection.collectAsStateWithLifecycle()
     val planMessage by viewModel.planMessage.collectAsStateWithLifecycle()
     val corrections by viewModel.corrections.collectAsStateWithLifecycle()
     val suggested by viewModel.suggested.collectAsStateWithLifecycle()
 
+    var apiKeyInput by remember { mutableStateOf("") }
+    var keyVisible by remember { mutableStateOf(false) }
 
     var editingTargets by remember { mutableStateOf(false) }
 
@@ -159,8 +162,74 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             StaggerIn(1) {
                 SettingsCard(
                     title = "Gemini",
-                    subtitle = "Photo logging runs on a key the app provides. Nothing to set up.",
+                    subtitle = if (state.hasApiKey) {
+                        "Your own key. Photos go straight to Google and the usage is yours. " +
+                            "Enter a new one to replace it, or clear it to go back to shared."
+                    } else {
+                        "Photo logging already works on a shared key. Add your own to use " +
+                            "your own quota and skip our server entirely."
+                    },
+                    badge = if (state.hasApiKey) "Own key" else "Shared",
                 ) {
+                    Spacer(Modifier.height(12.dp))
+                    LuxTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        label = "API key",
+                        visualTransformation = if (keyVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailing = {
+                            TextAction(
+                                if (keyVisible) "Hide" else "Show",
+                                onClick = { keyVisible = !keyVisible },
+                            )
+                        },
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    // Three buttons do not fit one row at phone width; wrapping beats a
+                    // truncated label.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SmallAction(
+                            text = "Save key",
+                            onClick = {
+                                viewModel.saveApiKey(apiKeyInput)
+                                apiKeyInput = ""
+                            },
+                            tone = ActionTone.Ink,
+                            enabled = apiKeyInput.isNotBlank(),
+                        )
+                        SmallAction(
+                            text = if (connection.testing) "Checking…" else "Test connection",
+                            onClick = viewModel::testConnection,
+                            enabled = state.hasApiKey && !connection.testing,
+                        )
+                        if (state.hasApiKey) {
+                            SmallAction(
+                                text = "Remove",
+                                onClick = viewModel::removeApiKey,
+                                tone = ActionTone.Ghost,
+                            )
+                        }
+                    }
+
+                    if (connection.testing) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text("Checking…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    connection.message?.let { Notice(it, success = connection.success) }
+
                     Spacer(Modifier.height(16.dp))
                     Text("Search grounding", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))

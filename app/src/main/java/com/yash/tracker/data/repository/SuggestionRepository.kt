@@ -9,6 +9,7 @@ import com.yash.tracker.data.local.entity.LogItemEntity
 import com.yash.tracker.data.local.entity.TargetEntity
 import com.yash.tracker.domain.diary.DiaryDate
 import com.yash.tracker.domain.diary.MealType
+import com.yash.tracker.domain.nutrition.DayMicroStatus
 import com.yash.tracker.domain.nutrition.MacroGap
 import com.yash.tracker.domain.nutrition.MacroSuggestion
 import com.yash.tracker.domain.nutrition.Macros
@@ -16,9 +17,11 @@ import com.yash.tracker.domain.nutrition.Micros
 import com.yash.tracker.domain.nutrition.MealBudget
 import com.yash.tracker.domain.nutrition.MealSuggester
 import com.yash.tracker.domain.nutrition.Plate
+import com.yash.tracker.domain.nutrition.PlateContext
 import com.yash.tracker.domain.nutrition.Serving
 import com.yash.tracker.domain.nutrition.ServingSource
 import com.yash.tracker.domain.nutrition.Servings
+import com.yash.tracker.domain.nutrition.SlotCount
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -47,21 +50,97 @@ class SuggestionRepository @Inject constructor(
         eaten: Macros,
         hour: Int,
         alreadyLogged: Set<MealType>,
+        date: LocalDate,
+        eatenMicros: Micros = Micros.UNKNOWN,
     ): MacroSuggestion = withContext(io) {
         val gap = MacroGap.between(target.asMacros(), eaten)
         if (gap.isSpent) return@withContext MacroSuggestion.DayDone
 
-        val share = MealBudget.shareFor(gap, hour, alreadyLogged)
+        val share = MealBudget.shareFor(gap, hour, alreadyLogged, learnedShares(date))
         val pool = pool()
         if (pool.isEmpty()) return@withContext MacroSuggestion.NoHistoryYet
 
-        val plates = MealSuggester.suggest(share.gap, pool)
+        val micros = DayMicroStatus.of(target.kcal.toDouble(), eatenMicros)
+        val (fibreNeed, sodiumRoom) = micros.forMeal(share.fraction)
+        val context = PlateContext(
+            fibreNeedG = fibreNeed,
+            sodiumRoomMg = sodiumRoom,
+            affinity = affinity(date, share.meal),
+            eatenToday = sourcesOn(date),
+            eatenYesterday = sourcesOn(date.minusDays(1)),
+        )
+
+        var plates = MealSuggester.suggest(share.gap, pool, context)
+        if (isPoorFit(plates)) {
+            plates = MealSuggester.suggest(share.gap, pool + fallback(share.gap, pool, context), context)
+        }
+
         if (plates.isEmpty()) {
             MacroSuggestion.NothingFits(share.meal, share.gap)
         } else {
-            MacroSuggestion.Plates(share.meal, share.gap, plates)
+            MacroSuggestion.Plates(share.meal, share.gap, plates, micros)
         }
     }
+
+    /**
+     * Whether the user's own food has failed this gap badly enough to look further.
+     *
+     * Either the best plate misses by roughly a third of the gap, or it leaves a protein debt
+     * that the rest of the day will struggle to pay. Anything better than that is answered
+     * from what they eat, however imperfectly, because a familiar near-miss beats a stranger.
+     */
+    private fun isPoorFit(plates: List<Plate>): Boolean {
+        val best = plates.firstOrNull() ?: return true
+        return best.fit > POOR_FIT || best.leftover.proteinG > PROTEIN_LEFT_G
+    }
+
+    /** The catalogue dishes that best answer this gap, as servings marked new. */
+    private suspend fun fallback(gap: MacroGap, pool: List<Serving>, context: PlateContext): List<Serving> {
+        val owned = pool.mapNotNull { (it.source as? ServingSource.Food)?.foodId }.toSet()
+        val servings = foodDao.fallbackDishes()
+            .filter { it.id !in owned }
+            .flatMap { food ->
+                Servings.ofFood(
+                    source = ServingSource.Food(food.id),
+                    name = food.name,
+                    per100g = food,
+                    defaultPortionG = food.defaultPortionG,
+                    portionLabel = food.portionLabel,
+                    isNew = true,
+                )
+            }
+        val keep = MealSuggester.bestSources(gap, servings, context, FALLBACK_FOODS).toSet()
+        return servings.filter { it.source in keep }
+    }
+
+    /** The last fortnight's split of each day across meals, today excluded as unfinished. */
+    private suspend fun learnedShares(date: LocalDate): Map<MealType, Double> {
+        val rows = logDao.mealKcalByDay(
+            from = DiaryDate.format(date.minusDays(SHARE_HISTORY_DAYS)),
+            to = DiaryDate.format(date.minusDays(1)),
+        )
+        val days = rows.groupBy { it.date }.values.map { day ->
+            day.mapNotNull { row ->
+                runCatching { MealType.valueOf(row.mealType) }.getOrNull()?.let { it to row.kcal }
+            }.toMap()
+        }
+        return MealBudget.learnShares(days)
+    }
+
+    private suspend fun affinity(date: LocalDate, meal: MealType): Map<ServingSource, SlotCount> =
+        logDao.mealAffinity(DiaryDate.format(date.minusDays(AFFINITY_HISTORY_DAYS)))
+            .groupBy { it.foodId?.let(ServingSource::Food) ?: ServingSource.Product(it.productId!!) }
+            .mapValues { (_, rows) ->
+                SlotCount(
+                    atThisMeal = rows.filter { it.mealType == meal.name }.sumOf { it.times },
+                    total = rows.sumOf { it.times },
+                )
+            }
+
+    private suspend fun sourcesOn(date: LocalDate): Set<ServingSource> =
+        logDao.sourcesOn(DiaryDate.format(date)).mapTo(mutableSetOf()) {
+            it.foodId?.let(ServingSource::Food) ?: ServingSource.Product(it.productId!!)
+        }
 
     /**
      * Everything the user could plausibly eat, as concrete portions.
@@ -194,6 +273,16 @@ class SuggestionRepository @Inject constructor(
         const val PRODUCT_FAMILIARITY = 3
 
         const val SOURCE = "SUGGESTED"
+
+        /** Roughly a third of the gap left unfilled, on [Plate.fit]'s scale. */
+        const val POOR_FIT = 0.1
+        const val PROTEIN_LEFT_G = 20.0
+
+        /** Catalogue dishes carried into the search when the user's own food falls short. */
+        const val FALLBACK_FOODS = 40
+
+        const val SHARE_HISTORY_DAYS = 14L
+        const val AFFINITY_HISTORY_DAYS = 60L
     }
 }
 

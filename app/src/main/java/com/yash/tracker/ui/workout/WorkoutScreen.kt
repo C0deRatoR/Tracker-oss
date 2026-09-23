@@ -47,6 +47,7 @@ import com.yash.tracker.data.local.dao.SessionWithSets
 import com.yash.tracker.data.local.entity.ExerciseEntity
 import com.yash.tracker.data.local.entity.isLogged
 import com.yash.tracker.domain.workout.NextWorkout
+import com.yash.tracker.domain.workout.TemplatePlan
 import com.yash.tracker.domain.workout.readable
 import com.yash.tracker.ui.components.ActionTone
 import com.yash.tracker.ui.components.CircleIconButton
@@ -59,6 +60,7 @@ import com.yash.tracker.ui.components.IconPlate
 import com.yash.tracker.ui.components.LuxCard
 import com.yash.tracker.ui.components.LuxTextField
 import com.yash.tracker.ui.components.LuxTopBar
+import com.yash.tracker.ui.components.SmallAction
 import com.yash.tracker.ui.components.Pill
 import com.yash.tracker.ui.components.PillButton
 import com.yash.tracker.ui.components.PillTone
@@ -83,6 +85,7 @@ fun WorkoutScreen(
     onStartRoutine: (Long?) -> Unit,
     onBrowseExercises: () -> Unit = {},
     onOpenSession: (Long) -> Unit = {},
+    onOpenReport: () -> Unit = {},
     viewModel: WorkoutViewModel = hiltViewModel(),
 ) {
     val routines by viewModel.routines.collectAsStateWithLifecycle()
@@ -90,6 +93,9 @@ fun WorkoutScreen(
     val resumableId by viewModel.resumableId.collectAsStateWithLifecycle()
     val draft by viewModel.newRoutine.collectAsStateWithLifecycle()
     val nextWorkout by viewModel.nextWorkout.collectAsStateWithLifecycle()
+    val trainingReport by viewModel.trainingReport.collectAsStateWithLifecycle()
+    val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val addedTemplates by viewModel.addedTemplates.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // A full screen, not a bottom sheet: the sheet's own drag-to-dismiss swallows a
@@ -140,6 +146,10 @@ fun WorkoutScreen(
             // Above the buttons, because it is the thing that decides which of them to press.
             (nextWorkout?.plan as? NextWorkout.Train)?.let { due ->
                 item { StaggerIn(1) { NextUpCard(due, nextWorkout?.movements.orEmpty()) } }
+            }
+
+            trainingReport?.takeIf { !it.isEmpty }?.let { report ->
+                item { StaggerIn(1) { TrainingWeekCard(report, onOpenReport) } }
             }
 
             item {
@@ -256,6 +266,21 @@ fun WorkoutScreen(
                 }
             }
 
+            if (templates.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    GroupHeader("Templates", count = "${templates.size}")
+                }
+                items(templates, key = { "template-${it.split.name}" }) { plan ->
+                    TemplateCard(
+                        plan = plan,
+                        added = plan.split in addedTemplates,
+                        onAdd = { viewModel.addTemplate(plan) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+
             item {
                 Spacer(Modifier.height(6.dp))
                 GroupHeader("History", count = "${sessions.size}")
@@ -274,6 +299,53 @@ fun WorkoutScreen(
                         } },
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A standard split, already fitted to the onboarding answers, one tap from being routines.
+ *
+ * The recommended one says why, so the choice can be disagreed with; the others are there for
+ * whoever knows they will train more or less than their activity level suggests.
+ */
+@Composable
+private fun TemplateCard(plan: TemplatePlan, added: Boolean, onAdd: () -> Unit, modifier: Modifier = Modifier) {
+    SoftCard(modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(plan.split.label, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        plan.split.daysPerWeek,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (plan.isRecommended) {
+                    Pill("For you", tone = PillTone.Accent)
+                    Spacer(Modifier.width(8.dp))
+                }
+                SmallAction(
+                    text = if (added) "Added" else "Add",
+                    onClick = onAdd,
+                    enabled = !added,
+                    tone = ActionTone.Soft,
+                )
+            }
+            plan.reason?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            plan.routines.forEach { routine ->
+                Spacer(Modifier.height(8.dp))
+                Text(routine.name, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    routine.exercises.joinToString(" · ") { "${it.name} ${it.sets}×${it.repsLow}–${it.repsHigh}" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -389,6 +461,9 @@ private fun SessionCard(
 private fun RoutineEditorScreen(viewModel: WorkoutViewModel) {
     val draft by viewModel.newRoutine.collectAsStateWithLifecycle()
     val nextWorkout by viewModel.nextWorkout.collectAsStateWithLifecycle()
+    val trainingReport by viewModel.trainingReport.collectAsStateWithLifecycle()
+    val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val addedTemplates by viewModel.addedTemplates.collectAsStateWithLifecycle()
 
     Column(
         Modifier

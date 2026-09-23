@@ -9,12 +9,22 @@ import com.yash.tracker.data.repository.NextWorkoutAdvice
 import com.yash.tracker.data.repository.WorkoutRepository
 import com.yash.tracker.domain.share.ShareText
 import com.yash.tracker.domain.workout.PersonalRecords
+import com.yash.tracker.data.local.entity.ProfileEntity
+import com.yash.tracker.data.repository.ProfileRepository
+import com.yash.tracker.domain.model.ActivityLevel
+import com.yash.tracker.domain.model.Goal
+import com.yash.tracker.domain.workout.RoutineTemplates
+import com.yash.tracker.domain.workout.Split
+import com.yash.tracker.domain.workout.TemplatePlan
+import com.yash.tracker.domain.workout.TemplateProfile
+import com.yash.tracker.domain.workout.TrainingReport
 import com.yash.tracker.data.repository.toScored
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +54,7 @@ data class NewRoutineState(
 @HiltViewModel
 class WorkoutViewModel @Inject constructor(
     private val workouts: WorkoutRepository,
+    profiles: ProfileRepository,
 ) : ViewModel() {
 
     val recentSessions: StateFlow<List<SessionWithSets>> = workouts.observeRecentSessions()
@@ -52,6 +63,25 @@ class WorkoutViewModel @Inject constructor(
     /** What is due, for the card above the routines. */
     val nextWorkout: StateFlow<NextWorkoutAdvice?> = workouts.observeNextWorkout()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The rolling week, for the balance card under it. */
+    val trainingReport: StateFlow<TrainingReport?> = workouts.observeTrainingReport()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The standard splits fitted to the onboarding answers, the one that suits them first. */
+    val templates: StateFlow<List<TemplatePlan>> = profiles.observeProfile()
+        .map { profile -> profile?.toTemplateProfile()?.let(RoutineTemplates::plansFor).orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _addedTemplates = MutableStateFlow<Set<Split>>(emptySet())
+    /** Splits added this visit, so the button says so instead of adding a second copy. */
+    val addedTemplates = _addedTemplates.asStateFlow()
+
+    fun addTemplate(plan: TemplatePlan) {
+        if (plan.split in _addedTemplates.value) return
+        _addedTemplates.update { it + plan.split }
+        viewModelScope.launch { workouts.addTemplate(plan.routines) }
+    }
 
     private val _routines = MutableStateFlow<List<RoutineCard>>(emptyList())
     val routines = _routines.asStateFlow()
@@ -192,3 +222,10 @@ fun SessionWithSets.bestSetLines(nameOf: (Long) -> String?): List<Pair<String, S
             }
             "$done × $name" to summary
         }
+
+/** The onboarding answers as the templates read them. Stored as enum names; a bad one means no fit. */
+private fun ProfileEntity.toTemplateProfile(): TemplateProfile? {
+    val goal = runCatching { Goal.valueOf(goal) }.getOrNull() ?: return null
+    val activity = runCatching { ActivityLevel.valueOf(activity) }.getOrNull() ?: return null
+    return TemplateProfile(age = age, goal = goal, activity = activity)
+}

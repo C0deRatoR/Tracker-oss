@@ -8,6 +8,7 @@ import com.yash.tracker.data.local.seed.SeedImporter
 import com.yash.tracker.domain.diary.MealType
 import com.yash.tracker.domain.nutrition.MacroSuggestion
 import com.yash.tracker.domain.nutrition.Macros
+import com.yash.tracker.domain.nutrition.PlateTag
 import com.yash.tracker.domain.nutrition.PortionResolver
 import com.yash.tracker.domain.nutrition.ServingSource
 import kotlinx.coroutines.Dispatchers
@@ -85,7 +86,7 @@ class MealSuggestionTest {
         eaten: Macros = Macros.ZERO,
         hour: Int = 19,
         logged: Set<MealType> = emptySet(),
-    ) = suggestions.suggest(target, eaten, hour, logged)
+    ) = suggestions.suggest(target, eaten, hour, logged, today)
 
     @Test
     fun `an empty diary has nothing to suggest from`() = runTest {
@@ -93,11 +94,13 @@ class MealSuggestionTest {
     }
 
     @Test
-    fun `suggestions only ever come from food already logged`() = runTest {
+    fun `a gap the user's own food fits never reaches into the catalogue`() = runTest {
         eatOnce("paneer")
         eatOnce("roti")
+        // Leaves a dinner that paneer and roti can close: little protein owed, room for both.
+        val eaten = Macros(kcal = 1700.0, proteinG = 160.0, carbsG = 170.0, fatG = 35.0)
 
-        val result = suggest() as MacroSuggestion.Plates
+        val result = suggest(eaten = eaten) as MacroSuggestion.Plates
         val pooled = db.foodDao().mostLogged().map { it.id }.toSet()
 
         val used = result.plates
@@ -106,6 +109,21 @@ class MealSuggestionTest {
 
         assertTrue(used.isNotEmpty())
         assertTrue("the catalogue at large must stay out of it", pooled.containsAll(used))
+        assertTrue(result.plates.none { PlateTag.NEW_FOOD in it.tags })
+    }
+
+    @Test
+    fun `catalogue dishes only ever arrive marked as new`() = runTest {
+        eatOnce("roti")
+        // A whole day of protein owed, and roti cannot pay it.
+        val result = suggest() as MacroSuggestion.Plates
+        val pooled = db.foodDao().mostLogged().map { it.id }.toSet()
+
+        val strangers = result.plates.flatMap { it.items }.filter {
+            (it.source as? ServingSource.Food)?.foodId !in pooled
+        }
+        assertTrue("a protein gap roti cannot close should look further", strangers.isNotEmpty())
+        assertTrue(strangers.all { it.isNew })
     }
 
     @Test
@@ -178,11 +196,11 @@ class MealSuggestionTest {
         val result = suggest() as MacroSuggestion.Plates
         val plate = result.plates.first()
         val foodIds = plate.items.mapNotNull { (it.source as? ServingSource.Food)?.foodId }
-        val before = db.foodDao().mostLogged().filter { it.id in foodIds }.associate { it.id to it.timesLogged }
+        val before = foodIds.associateWith { db.foodDao().getById(it)!!.timesLogged }
 
         suggestions.logPlate(today, MealType.DINNER, plate)
 
-        val after = db.foodDao().mostLogged().filter { it.id in foodIds }.associate { it.id to it.timesLogged }
+        val after = foodIds.associateWith { db.foodDao().getById(it)!!.timesLogged }
         foodIds.forEach { assertEquals(before.getValue(it) + 1, after.getValue(it)) }
     }
 
@@ -190,8 +208,16 @@ class MealSuggestionTest {
     fun `a saved meal is suggested whole and logs through its template`() = runTest {
         val entryId = eatOnce("paneer")
         meals.saveEntryAsMeal(entryId, "Usual paneer plate")
+        // Leave a dinner the saved plate is the answer to, so it is not crowded out by larger ones.
+        val saved = db.mealDao().all().single().template
+        val eaten = Macros(
+            kcal = target.kcal - saved.kcal,
+            proteinG = target.proteinG - saved.proteinG,
+            carbsG = target.carbsG - saved.carbsG,
+            fatG = target.fatG - saved.fatG,
+        )
 
-        val result = suggest() as MacroSuggestion.Plates
+        val result = suggest(eaten = eaten) as MacroSuggestion.Plates
         val savedPlate = result.plates
             .first { it.items.first().source is ServingSource.SavedMeal }
 

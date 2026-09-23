@@ -108,6 +108,24 @@ interface FoodDao {
     @Query("SELECT * FROM food WHERE times_logged > 0 ORDER BY times_logged DESC LIMIT :limit")
     suspend fun mostLogged(limit: Int = 60): List<FoodEntity>
 
+    /**
+     * Cooked dishes the user has never logged, for when their own food cannot close a gap.
+     *
+     * Dishes rather than the ingredient tables, for the reason [mostLogged] gives: a gap is
+     * closed by a plate of something, not by 140 g of raw chicken thigh. Sweets and drinks
+     * are left out because neither is ever the answer to a macro gap. The ranking against
+     * the gap happens in code, where it can use the same cost the suggestions do.
+     */
+    @Query(
+        """
+        SELECT * FROM food
+        WHERE times_logged = 0 AND (source = 'INDB' OR is_verified = 1)
+          AND kcal_100g > 0 AND default_portion_g > 0
+          AND (category IS NULL OR category NOT IN ('SWEET', 'BEVERAGE'))
+        """,
+    )
+    suspend fun fallbackDishes(): List<FoodEntity>
+
     @Query("UPDATE food SET times_logged = times_logged + 1 WHERE id = :id")
     suspend fun incrementTimesLogged(id: Long)
 

@@ -100,13 +100,87 @@ object MealBudget {
     }
 
     /** The slot a suggestion is being made for, and the share of [gap] it should take. */
-    fun shareFor(gap: MacroGap, hour: Int, alreadyLogged: Set<MealType> = emptySet()): MealShare {
+    fun shareFor(
+        gap: MacroGap,
+        hour: Int,
+        alreadyLogged: Set<MealType> = emptySet(),
+        shares: Map<MealType, Double> = SHARE,
+    ): MealShare {
         val slots = slotsLeft(hour, alreadyLogged)
         val next = slots.first()
-        val total = slots.sumOf { SHARE.getValue(it) }
-        return MealShare(meal = next, gap = gap.scaledBy(SHARE.getValue(next) / total))
+        val total = slots.sumOf { shares.getValue(it) }
+        val fraction = shares.getValue(next) / total
+        return MealShare(meal = next, gap = gap.scaledBy(fraction), fraction = fraction)
     }
+
+    /**
+     * The day as this user actually eats it, rather than as a textbook splits it.
+     *
+     * Someone who eats a small breakfast and a big dinner should not be offered a 550 kcal
+     * breakfast because a quarter of the day is what breakfast "is". Each past day's split
+     * is averaged and then shrunk towards the default by how many days there are — a week of
+     * history moves it halfway, a single day barely at all — so one odd day cannot redraw the
+     * budget. Days with too little logged are skipped: a day with only lunch on it says
+     * lunch is the whole day, which is a gap in the diary, not a habit.
+     *
+     * Every slot keeps a floor, so a meal the user rarely eats still gets a small plate
+     * rather than an empty one on the day they do.
+     */
+    fun learnShares(days: List<Map<MealType, Double>>): Map<MealType, Double> {
+        val complete = days.filter { it.values.sum() >= MIN_DAY_KCAL }
+        if (complete.isEmpty()) return SHARE
+
+        val weight = complete.size / (complete.size + SHRINK_DAYS)
+        val blended = ORDER.associateWith { meal ->
+            val observed = complete.sumOf { day -> (day[meal] ?: 0.0) / day.values.sum() } / complete.size
+            (weight * observed + (1 - weight) * SHARE.getValue(meal)).coerceAtLeast(MIN_SHARE)
+        }
+        val total = blended.values.sum()
+        return blended.mapValues { it.value / total }
+    }
+
+    /** Fewer calories than this logged, and the day is missing meals rather than showing a split. */
+    private const val MIN_DAY_KCAL = 800.0
+
+    /** How many days of history it takes to move the split halfway from the default. */
+    private const val SHRINK_DAYS = 7.0
+
+    private const val MIN_SHARE = 0.05
 }
 
 /** Which meal a suggestion is for, and the part of the day's remainder it may spend. */
-data class MealShare(val meal: MealType, val gap: MacroGap)
+data class MealShare(val meal: MealType, val gap: MacroGap, val fraction: Double = 1.0)
+
+/**
+ * Where the day stands on the three micros the catalogue carries.
+ *
+ * There are no stored targets for these, and they do not need one: fibre is fourteen grams per
+ * thousand calories of the day's target (the dietary-guideline density [MealReviewer] also
+ * scores against), and sodium is capped at 2,300 mg whatever the target. Sugar has no daily
+ * line here at all — it is judged plate by plate against the fibre it arrives with.
+ */
+data class DayMicroStatus(
+    val fibreEatenG: Double?,
+    val fibreTargetG: Double,
+    val sodiumEatenMg: Double?,
+) {
+    /** What one meal, taking [fraction] of the rest of the day, should bring and may spend. */
+    fun forMeal(fraction: Double): Pair<Double, Double> {
+        val fibreNeed = (fibreTargetG - (fibreEatenG ?: 0.0)).coerceAtLeast(0.0) * fraction
+        val sodiumRoom = (SODIUM_CAP_MG - (sodiumEatenMg ?: 0.0)).coerceAtLeast(0.0) * fraction
+        return fibreNeed to sodiumRoom
+    }
+
+    val sodiumLeftMg: Double? get() = sodiumEatenMg?.let { (SODIUM_CAP_MG - it).coerceAtLeast(0.0) }
+
+    companion object {
+        const val FIBRE_PER_1000_KCAL = 14.0
+        const val SODIUM_CAP_MG = 2300.0
+
+        fun of(targetKcal: Double, eaten: Micros) = DayMicroStatus(
+            fibreEatenG = eaten.fibreG,
+            fibreTargetG = FIBRE_PER_1000_KCAL * targetKcal / 1000.0,
+            sodiumEatenMg = eaten.sodiumMg,
+        )
+    }
+}

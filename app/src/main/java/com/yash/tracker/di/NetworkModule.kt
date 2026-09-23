@@ -2,6 +2,8 @@ package com.yash.tracker.di
 
 import com.yash.tracker.data.prefs.SettingsRepository
 import com.yash.tracker.data.backup.BackupCodeStore
+import com.yash.tracker.data.remote.CoachNotes
+import com.yash.tracker.data.remote.GeminiClient
 import com.yash.tracker.data.remote.GeminiConfig
 import com.yash.tracker.data.remote.AppIdentity
 import com.yash.tracker.data.remote.ExerciseDbService
@@ -90,4 +92,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideAppIdentity(identity: FirebaseAppIdentity): AppIdentity = identity
+
+    @Provides
+    @Singleton
+    fun provideCoachNotes(client: GeminiClient): CoachNotes = client
 }
