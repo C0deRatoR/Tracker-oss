@@ -401,6 +401,10 @@ class WorkoutRepository @Inject constructor(
      * Like [observeNextWorkout], the clock is read once per subscription: the window moves a
      * day at a time and the screen is re-subscribed long before that matters.
      */
+    /** Every logged working set since [from], shaped for the analyses. */
+    fun observeHistorySets(from: Long): Flow<List<HistorySet>> =
+        dao.observeHistorySets(from).map { rows -> rows.map { it.toHistorySet() } }.flowOn(io)
+
     fun observeTrainingReport(now: Long = System.currentTimeMillis()): Flow<TrainingReport> =
         combine(
             dao.observeHistorySets(now - TrainingAnalyst.HISTORY_MS),

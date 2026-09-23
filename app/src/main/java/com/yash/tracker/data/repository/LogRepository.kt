@@ -2,6 +2,9 @@ package com.yash.tracker.data.repository
 
 import com.yash.tracker.data.local.dao.DayKcal
 import com.yash.tracker.data.local.dao.DayMacros
+import com.yash.tracker.data.local.dao.DayNutritionRow
+import com.yash.tracker.data.local.dao.FoodTotalRow
+import com.yash.tracker.data.local.dao.MealKcal
 import com.yash.tracker.data.local.dao.DayTotals
 import com.yash.tracker.data.local.dao.EntryWithItems
 import com.yash.tracker.data.local.dao.LogDao
@@ -38,6 +41,15 @@ class LogRepository @Inject constructor(
 
     fun observeDailyMacros(from: LocalDate, to: LocalDate): Flow<List<DayMacros>> =
         dao.observeDailyMacros(DiaryDate.format(from), DiaryDate.format(to))
+
+    fun observeDailyNutrition(from: LocalDate, to: LocalDate): Flow<List<DayNutritionRow>> =
+        dao.observeDailyNutrition(DiaryDate.format(from), DiaryDate.format(to))
+
+    fun observeMealKcal(from: LocalDate, to: LocalDate): Flow<List<MealKcal>> =
+        dao.observeMealKcal(DiaryDate.format(from), DiaryDate.format(to))
+
+    fun observeTopFoods(from: LocalDate, to: LocalDate): Flow<List<FoodTotalRow>> =
+        dao.observeTopFoods(DiaryDate.format(from), DiaryDate.format(to))
 
     fun observeDailyKcal(from: LocalDate, to: LocalDate): Flow<List<DayKcal>> =
         dao.observeDailyKcal(DiaryDate.format(from), DiaryDate.format(to))

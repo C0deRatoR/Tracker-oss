@@ -258,14 +258,28 @@ object TrainingAnalyst {
             primaryOf(set).firstOrNull() in
             setOf(Muscle.LATS, Muscle.MIDDLE_BACK, Muscle.BICEPS, Muscle.TRAPS, Muscle.SHOULDERS)
 
+    /** Primary sets count whole, secondary sets half — the one counting rule every view shares. */
+    fun effectiveSets(sets: List<HistorySet>): Map<Muscle, Double> =
+        Muscle.entries.associateWith { muscle -> credited(sets, muscle).sets }
+
+    private class Credit(val primary: List<HistorySet>, val secondary: List<HistorySet>) {
+        val sets: Double get() = primary.size + SECONDARY_CREDIT * secondary.size
+        val touched: List<HistorySet> get() = primary + secondary
+    }
+
+    private fun credited(sets: List<HistorySet>, muscle: Muscle): Credit {
+        val primary = sets.filter { muscle in primaryOf(it) }
+        val secondary = sets.filter { set ->
+            muscle !in primaryOf(set) && set.secondaryMuscles.any { Muscle.ofCatalogue(it) == muscle }
+        }
+        return Credit(primary, secondary)
+    }
+
     private fun muscleVolumes(week: List<HistorySet>, now: Long): List<MuscleVolume> =
         Muscle.entries.map { muscle ->
-            val primary = week.filter { muscle in primaryOf(it) }
-            val secondary = week.filter { set ->
-                muscle !in primaryOf(set) && set.secondaryMuscles.any { Muscle.ofCatalogue(it) == muscle }
-            }
-            val sets = primary.size + SECONDARY_CREDIT * secondary.size
-            val touched = primary + secondary
+            val credit = credited(week, muscle)
+            val sets = credit.sets
+            val touched = credit.touched
             MuscleVolume(
                 muscle = muscle,
                 sets = sets,

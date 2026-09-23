@@ -21,6 +21,21 @@ data class EntryWithItems(
 
 data class DayKcal(val date: String, val kcal: Double)
 
+/** A day's totals with the three micros, for the nutrition analysis. */
+data class DayNutritionRow(
+    val date: String,
+    val kcal: Double,
+    val proteinG: Double,
+    val carbsG: Double,
+    val fatG: Double,
+    val fibreG: Double?,
+    val sugarG: Double?,
+    val sodiumMg: Double?,
+)
+
+/** One food's calories over a range, by the name it was logged under. */
+data class FoodTotalRow(val name: String, val kcal: Double, val times: Int)
+
 /** One meal's calories on one day, for learning how this user splits a day. */
 data class MealKcal(val date: String, val mealType: String, val kcal: Double)
 
@@ -184,4 +199,48 @@ interface LogDao {
         """,
     )
     suspend fun sourcesOn(date: String): List<SourceRef>
+
+    @Query(
+        """
+        SELECT date,
+               COALESCE(SUM(kcal), 0.0) AS kcal,
+               COALESCE(SUM(protein_g), 0.0) AS proteinG,
+               COALESCE(SUM(carbs_g), 0.0) AS carbsG,
+               COALESCE(SUM(fat_g), 0.0) AS fatG,
+               SUM(fibre_g) AS fibreG,
+               SUM(sugar_g) AS sugarG,
+               SUM(sodium_mg) AS sodiumMg
+        FROM log_entry WHERE date BETWEEN :from AND :to
+        GROUP BY date
+        ORDER BY date ASC
+        """,
+    )
+    fun observeDailyNutrition(from: String, to: String): Flow<List<DayNutritionRow>>
+
+    @Query(
+        """
+        SELECT date, meal_type AS mealType, COALESCE(SUM(kcal), 0.0) AS kcal
+        FROM log_entry WHERE date BETWEEN :from AND :to
+        GROUP BY date, meal_type
+        """,
+    )
+    fun observeMealKcal(from: String, to: String): Flow<List<MealKcal>>
+
+    /**
+     * What supplied the calories, by the name each row was logged under.
+     *
+     * By name rather than food id: the same dish logged by photo, by search and from a saved
+     * meal lands on different ids or none, and to the reader it is one food.
+     */
+    @Query(
+        """
+        SELECT li.name AS name, SUM(li.kcal) AS kcal, COUNT(DISTINCT le.id) AS times
+        FROM log_item li JOIN log_entry le ON le.id = li.entry_id
+        WHERE le.date BETWEEN :from AND :to
+        GROUP BY li.name COLLATE NOCASE
+        ORDER BY kcal DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeTopFoods(from: String, to: String, limit: Int = 12): Flow<List<FoodTotalRow>>
 }

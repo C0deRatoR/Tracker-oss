@@ -80,6 +80,7 @@ private val DAY_LETTER = DateTimeFormatter.ofPattern("EEEEE")
 @Composable
 fun ProgressScreen(viewModel: ProgressViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val tab by viewModel.tab.collectAsStateWithLifecycle()
 
     if (state.entryOpen) WeightEntrySheet(state, viewModel)
 
@@ -94,47 +95,73 @@ fun ProgressScreen(viewModel: ProgressViewModel = hiltViewModel()) {
             item {
                 StaggerIn(0) {
                     SegmentedToggle(
-                        options = ProgressRange.entries.map { it.label },
-                        selectedIndex = ProgressRange.entries.indexOf(state.range),
-                        onSelect = { viewModel.setRange(ProgressRange.entries[it]) },
+                        options = ProgressTab.entries.map { it.label },
+                        selectedIndex = ProgressTab.entries.indexOf(tab),
+                        onSelect = { viewModel.setTab(ProgressTab.entries[it]) },
                         modifier = Modifier.fillMaxWidth(),
                         height = 44.dp,
                     )
                 }
             }
-            item { StaggerIn(1) { WeightCard(state, viewModel) } }
-            item { StaggerIn(2) { AdherenceCard(state) } }
-            item { StaggerIn(3) { MacrosCard(state) } }
-            item { StaggerIn(4) { VolumeCard(state) } }
-
-            item {
-                Spacer(Modifier.height(4.dp))
-                GroupHeader("Weigh-ins", count = "${state.weighIns.size}")
+            // Training reads its own fixed windows — twelve weeks, six months — so the range
+            // only means something on the other two.
+            if (tab != ProgressTab.TRAINING) {
+                item {
+                    SegmentedToggle(
+                        options = ProgressRange.entries.map { it.label },
+                        selectedIndex = ProgressRange.entries.indexOf(state.range),
+                        onSelect = { viewModel.setRange(ProgressRange.entries[it]) },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 36.dp,
+                    )
+                }
             }
 
-            if (state.weighIns.isEmpty()) {
-                item { EmptyNote("Nothing logged yet.") }
-            } else {
-                items(state.weighIns, key = { it.id }) { weighIn ->
-                    SoftCard(Modifier.fillMaxWidth().animateItem()) {
-                        Row(
-                            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                weighIn.date.format(WEIGH_IN_DATE),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                "%.1f kg".format(weighIn.weightKg),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            TextAction("Delete", onClick = { viewModel.deleteWeighIn(weighIn.id) })
+            when (tab) {
+                ProgressTab.BODY -> {
+                    item { StaggerIn(1) { WeightCard(state, viewModel) } }
+                    state.body?.let { body -> item { StaggerIn(2) { BodyInsightsCard(body) } } }
+
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        GroupHeader("Weigh-ins", count = "${state.weighIns.size}")
+                    }
+                    if (state.weighIns.isEmpty()) {
+                        item { EmptyNote("Nothing logged yet.") }
+                    } else {
+                        items(state.weighIns, key = { it.id }) { weighIn ->
+                            SoftCard(Modifier.fillMaxWidth().animateItem()) {
+                                Row(
+                                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        weighIn.date.format(WEIGH_IN_DATE),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        "%.1f kg".format(weighIn.weightKg),
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    TextAction("Delete", onClick = { viewModel.deleteWeighIn(weighIn.id) })
+                                }
+                            }
                         }
                     }
+                }
+
+                ProgressTab.FOOD -> {
+                    item { StaggerIn(1) { AdherenceCard(state) } }
+                    item { StaggerIn(2) { MacrosCard(state) } }
+                    state.nutrition?.let { nutrition -> item { StaggerIn(3) { FoodInsights(nutrition) } } }
+                }
+
+                ProgressTab.TRAINING -> {
+                    item { StaggerIn(1) { VolumeCard(state) } }
+                    state.strength?.let { strength -> item { StaggerIn(2) { TrainingInsights(strength) } } }
                 }
             }
 
@@ -151,6 +178,17 @@ fun ProgressScreen(viewModel: ProgressViewModel = hiltViewModel()) {
             }
         }
     }
+}
+
+/** The food insights are several cards; stacked here so the list sees one item. */
+@Composable
+private fun FoodInsights(report: com.yash.tracker.domain.progress.NutritionReport) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { FoodInsightsCard(report) }
+}
+
+@Composable
+private fun TrainingInsights(report: com.yash.tracker.domain.progress.StrengthReport) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { StrengthInsights(report) }
 }
 
 // --- weight ---------------------------------------------------------------------------------
@@ -198,7 +236,7 @@ private fun WeightCard(state: ProgressUiState, viewModel: ProgressViewModel) {
             if (state.points.size >= 2) {
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Legend("7-day average", MaterialTheme.colorScheme.primary, line = true)
+                    Legend("Trend", MaterialTheme.colorScheme.primary, line = true)
                     Legend("Weigh-in", MaterialTheme.colorScheme.onSurfaceVariant, line = false)
                     if (state.goalWeightKg != null) {
                         Legend("Target", MaterialTheme.colorScheme.outline, line = true, dashed = true)

@@ -3,6 +3,21 @@ package com.yash.tracker.ui.progress
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yash.tracker.data.local.dao.DayMacros
+import com.yash.tracker.data.local.dao.DayNutritionRow
+import com.yash.tracker.data.local.dao.FoodTotalRow
+import com.yash.tracker.data.local.dao.MealKcal
+import com.yash.tracker.domain.diary.MealType
+import com.yash.tracker.domain.model.Goal
+import com.yash.tracker.domain.progress.BodyAnalyst
+import com.yash.tracker.domain.progress.BodyReport
+import com.yash.tracker.domain.progress.DayNutrition
+import com.yash.tracker.domain.progress.FoodTotal
+import com.yash.tracker.domain.progress.NutritionAnalyst
+import com.yash.tracker.domain.progress.NutritionReport
+import com.yash.tracker.domain.progress.NutritionTargets
+import com.yash.tracker.domain.progress.StrengthAnalyst
+import com.yash.tracker.domain.progress.StrengthReport
+import java.time.Instant
 import com.yash.tracker.data.local.entity.ProfileEntity
 import com.yash.tracker.data.local.entity.TargetEntity
 import com.yash.tracker.data.local.entity.WeightLogEntity
@@ -12,12 +27,12 @@ import com.yash.tracker.data.repository.WorkoutRepository
 import com.yash.tracker.domain.diary.DiaryDate
 import com.yash.tracker.domain.progress.Adherence
 import com.yash.tracker.domain.progress.DayPoint
-import com.yash.tracker.domain.progress.MovingAverage
 import com.yash.tracker.domain.progress.Streak
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -43,6 +58,9 @@ data class WeighIn(val id: Long, val date: LocalDate, val weightKg: Double)
 
 /** One bar of the workout-volume chart. */
 data class WeekVolume(val label: String, val kg: Double, val sessions: Int)
+
+/** The three halves of the screen, so no one scroll carries all of it. */
+enum class ProgressTab(val label: String) { BODY("Body"), FOOD("Food"), TRAINING("Training") }
 
 /** The window the whole screen is read through. */
 enum class ProgressRange(val label: String, val days: Long?) {
@@ -72,11 +90,32 @@ data class ProgressUiState(
     val volumeChangePercent: Int? = null,
     val entryOpen: Boolean = false,
     val entryText: String = "",
+    val body: BodyReport? = null,
+    val nutrition: NutritionReport? = null,
+    val strength: StrengthReport? = null,
 ) {
     /** Within 10% of target, which is the definition the adherence figure uses too. */
     fun onTarget(kcal: Double): Boolean =
         targetKcal > 0 && abs(kcal - targetKcal) <= targetKcal * 0.1
 }
+
+private data class DiaryInputs(
+    val daily: List<DayMacros>,
+    val nutrition: List<DayNutritionRow>,
+    val meals: List<MealKcal>,
+    val foods: List<FoodTotalRow>,
+)
+
+private fun DayNutritionRow.toDomain() = DayNutrition(
+    date = DiaryDate.parse(date),
+    kcal = kcal,
+    proteinG = proteinG,
+    carbsG = carbsG,
+    fatG = fatG,
+    fibreG = fibreG,
+    sugarG = sugarG,
+    sodiumMg = sodiumMg,
+)
 
 private data class Baseline(
     val weights: List<WeightLogEntity>,
@@ -112,10 +151,22 @@ class ProgressViewModel @Inject constructor(
         val depth = maxOf(base.range.days ?: MAX_DAYS, 30L)
         val from = today.minusDays(depth - 1)
 
-        combine(
+        val historyFrom = today.minusDays(STRENGTH_HISTORY_DAYS)
+            .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val diary = combine(
             logs.observeDailyMacros(from, today),
+            logs.observeDailyNutrition(from, today),
+            logs.observeMealKcal(from, today),
+            // The ranking follows the window on screen, not the thirty-day floor above.
+            logs.observeTopFoods(base.range.days?.let { today.minusDays(it - 1) } ?: from, today),
+        ) { daily, nutrition, meals, foods -> DiaryInputs(daily, nutrition, meals, foods) }
+        val training = combine(
             workouts.observeRecentSessions(),
-        ) { daily, sessions ->
+            workouts.observeHistorySets(historyFrom),
+        ) { sessions, sets -> sessions to sets }
+
+        combine(diary, training) { inputs, (sessions, historySets) ->
+            val daily = inputs.daily
             val weighIns = base.weights
                 .map { WeighIn(it.id, DiaryDate.parse(it.date), it.weightKg) }
                 .sortedBy { it.date }
@@ -132,11 +183,53 @@ class ProgressViewModel @Inject constructor(
             val finished = sessions.map { it.session }.filter { it.isFinished }
             val volumes = finished.byWeek(today)
 
+            val allWeights = weighIns.map { DayPoint(it.date, it.weightKg) }
+            val body = BodyAnalyst.analyse(
+                weighIns = allWeights,
+                dailyKcal = daily.map { DayPoint(DiaryDate.parse(it.date), it.kcal) },
+                today = today,
+                goal = base.profile?.goal?.let { runCatching { Goal.valueOf(it) }.getOrNull() },
+                goalWeightKg = base.profile?.goalWeightKg,
+                planRateLbPerWeek = base.target?.rateLbPerWeek,
+                planTdee = base.target?.tdee,
+            )
+
+            val nutritionDays = inputs.nutrition.map { it.toDomain() }
+                .filter { windowStart == null || it.date >= windowStart }
+            val nutrition = NutritionAnalyst.analyse(
+                days = nutritionDays,
+                targets = base.target?.let {
+                    NutritionTargets(it.kcal.toDouble(), it.proteinG, it.carbsG, it.fatG)
+                },
+                bodyweightKg = body.currentTrendKg,
+                mealKcal = inputs.meals
+                    .mapNotNull { row ->
+                        runCatching { MealType.valueOf(row.mealType) }.getOrNull()
+                            ?.let { Triple(DiaryDate.parse(row.date), it, row.kcal) }
+                    }
+                    .filter { windowStart == null || it.first >= windowStart }
+                    .groupBy({ it.first }, { it.second to it.third })
+                    .mapValues { (_, pairs) -> pairs.toMap() },
+                foods = inputs.foods.map { FoodTotal(it.name, it.kcal, it.times) },
+                trainingDays = finished.map {
+                    Instant.ofEpochMilli(it.startedAt).atZone(ZoneId.systemDefault()).toLocalDate()
+                }.toSet(),
+            )
+
+            val strength = StrengthAnalyst.analyse(
+                sets = historySets,
+                today = today,
+                proteinByDay = inputs.nutrition
+                    .filter { it.kcal >= BodyAnalyst.FULL_DAY_KCAL }
+                    .associate { DiaryDate.parse(it.date) to it.proteinG },
+            )
+
             ProgressUiState(
                 range = base.range,
                 weighIns = weighIns.reversed(),
                 points = points,
-                trend = MovingAverage.overDays(points, days = TREND_DAYS),
+                // The smoothed trend, drawn across the window on screen.
+                trend = body.trend.filter { windowStart == null || it.date >= windowStart },
                 goalWeightKg = base.profile?.goalWeightKg,
                 // Change is measured across the window on screen, not across all of history.
                 changeKg = if (points.size >= 2) points.last().value - points.first().value else null,
@@ -153,9 +246,19 @@ class ProgressViewModel @Inject constructor(
                 volumeChangePercent = volumes.changePercent(),
                 entryOpen = base.entry.first,
                 entryText = base.entry.second,
+                body = body,
+                nutrition = nutrition,
+                strength = strength,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressUiState())
+
+    private val _tab = MutableStateFlow(ProgressTab.BODY)
+    val tab = _tab.asStateFlow()
+
+    fun setTab(value: ProgressTab) {
+        _tab.value = value
+    }
 
     fun setRange(value: ProgressRange) {
         range.value = value
@@ -188,7 +291,8 @@ class ProgressViewModel @Inject constructor(
     }
 
     private companion object {
-        const val TREND_DAYS = 7
+        /** Long enough to see a lift stall and recover, and to fill twelve weeks of sets. */
+        const val STRENGTH_HISTORY_DAYS = 180L
 
         /** "All time" still has to end somewhere; ten years is past any real diary. */
         const val MAX_DAYS = 3650L
